@@ -126,7 +126,7 @@ class AgentBoardApp(App):
         """Toggle focus between nav tree and chat view."""
         nav = self.query_one("#nav-tree", NavTree)
         chat = self.query_one("#chat-view", ChatView)
-        if nav.has_focus:
+        if nav.has_focus_within:
             chat.focus()
         else:
             nav.focus()

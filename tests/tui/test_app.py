@@ -100,6 +100,49 @@ async def test_chat_view_visible_in_layout(data_dir):
         assert chat.region.x < 80, f"ChatView starts at x={chat.region.x}, off-screen"
 
 
+async def test_tab_switches_focus_nav_to_chat(data_dir):
+    """Tab moves focus from nav tree to chat view."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        nav = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        nav.focus()
+        await pilot.pause()
+        assert nav.has_focus_within
+        await pilot.press("tab")
+        await pilot.pause()
+        assert chat.has_focus_within
+
+
+async def test_tab_switches_focus_chat_to_nav(data_dir):
+    """Tab moves focus from chat view to nav tree."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        nav = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        chat.focus()
+        await pilot.pause()
+        assert chat.has_focus_within
+        await pilot.press("tab")
+        await pilot.pause()
+        assert nav.has_focus_within
+
+
+async def test_tab_from_search_bar_goes_to_nav(data_dir):
+    """Tab from search bar sends focus to nav tree."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        nav = app.query_one(NavTree)
+        search = app.query_one(SearchBar)
+        # Show and focus search bar
+        await pilot.press("slash")
+        await pilot.pause()
+        assert not nav.has_focus_within
+        await pilot.press("tab")
+        await pilot.pause()
+        assert nav.has_focus_within
+
+
 async def test_agent_filter_keybinding(data_dir):
     """Pressing 'f' cycles agent filter and updates AgentBar indicator."""
     app = AgentBoardApp(data_dir=data_dir)
