@@ -37,9 +37,16 @@ class AgentBar(Static):
         self.breadcrumb_parts = breadcrumb_parts
         self._refresh_content()
 
-    def set_filter(self, agent_type: str | None) -> None:
+    def set_filter(
+        self,
+        agent_type: str | None,
+        position: int | None = None,
+        total: int | None = None,
+    ) -> None:
         """Set or clear the active agent filter indicator."""
         self._filter_type = agent_type
+        self._filter_position = position
+        self._filter_total = total
         self._refresh_content()
 
     def clear(self) -> None:
@@ -74,7 +81,10 @@ class AgentBar(Static):
         if self._filter_type:
             type_info = self.agent_types.get(self._filter_type, {})
             filter_label = type_info.get("label", self._filter_type)
-            filter_text = f"[bold yellow]Filter: {filter_label}[/]"
+            pos_info = ""
+            if self._filter_position is not None and self._filter_total is not None:
+                pos_info = f" [{self._filter_position}/{self._filter_total}]"
+            filter_text = f"[bold yellow]Filter: {filter_label}{pos_info}[/]"
 
         sections = []
         if roster:

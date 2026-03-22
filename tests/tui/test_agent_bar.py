@@ -69,6 +69,21 @@ async def test_agent_bar_set_filter(sample_agent_types):
         assert "Filter: Web Search Researcher" in str(bar._markup)
 
 
+async def test_agent_bar_filter_shows_position(sample_agent_types):
+    """Filter indicator shows cycle position like [2/3]."""
+    app = AgentBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(AgentBar)
+        agents = [
+            {"agentId": "a1", "type": "web-search-researcher", "messageCount": 5},
+        ]
+        bar.update_meeting(agents, sample_agent_types, ["proj", "sess", "team"])
+        bar.set_filter("general-purpose", position=2, total=3)
+        await pilot.pause()
+        assert "[2/3]" in str(bar._markup)
+        assert "Filter: General Purpose" in str(bar._markup)
+
+
 async def test_agent_bar_clear_filter(sample_agent_types):
     """Clearing the filter removes the filter indicator."""
     app = AgentBarApp()

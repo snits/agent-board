@@ -214,7 +214,11 @@ class AgentBoardApp(App):
         """Re-render chat view with current search and agent filters."""
         # Update filter indicator in agent bar
         if self._agent_filter:
-            self.query_one(AgentBar).set_filter(next(iter(self._agent_filter)))
+            current = next(iter(self._agent_filter))
+            type_list = sorted(self._agent_types.keys())
+            position = type_list.index(current) + 1 if current in type_list else None
+            total = len(type_list)
+            self.query_one(AgentBar).set_filter(current, position=position, total=total)
         else:
             self.query_one(AgentBar).set_filter(None)
 
