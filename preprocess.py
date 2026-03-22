@@ -49,8 +49,12 @@ def parse_agent_meta(subagents_dir: Path) -> dict[str, dict]:
 
 
 def parse_agent_transcripts(subagents_dir: Path) -> list[dict]:
-    """Parse all agent JSONL files and return a flat list of parsed records."""
+    """Parse all agent JSONL files and return a deduplicated list of parsed records.
+
+    Team lead broadcast messages appear in every agent's JSONL with the same UUID.
+    We keep only the first occurrence of each UUID."""
     all_records = []
+    seen_uuids = set()
     for jsonl_file in sorted(Path(subagents_dir).glob("agent-*.jsonl")):
         with open(jsonl_file) as f:
             for line in f:
@@ -63,6 +67,11 @@ def parse_agent_transcripts(subagents_dir: Path) -> list[dict]:
                     continue
                 parsed = parse_record(raw)
                 if parsed:
+                    uuid = parsed.get("uuid")
+                    if uuid and uuid in seen_uuids:
+                        continue
+                    if uuid:
+                        seen_uuids.add(uuid)
                     all_records.append(parsed)
     return all_records
 
