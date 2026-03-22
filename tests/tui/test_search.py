@@ -83,7 +83,35 @@ async def test_search_bar_hide_clears_value():
         bar.show()
         await pilot.pause()
         bar.value = "test query"
-        bar.hide()
+        bar.clear()
         await pilot.pause()
         assert not bar.has_class("-visible")
         assert bar.value == ""
+
+
+async def test_search_bar_dismiss_keeps_query():
+    """Enter dismisses search bar but preserves the query."""
+    app = SearchBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        bar.value = "test query"
+        bar.dismiss()
+        await pilot.pause()
+        assert not bar.has_class("-visible")
+        assert bar.value == "test query"
+
+
+async def test_search_bar_enter_dismisses_not_clears():
+    """Pressing Enter hides bar but keeps the query value."""
+    app = SearchBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        bar.value = "test query"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert not bar.has_class("-visible")
+        assert bar.value == "test query"

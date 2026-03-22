@@ -110,7 +110,10 @@ class AgentBoardApp(App):
         """Handle Escape — hide search, clear filters, or return focus."""
         search = self.query_one(SearchBar)
         if search.has_class("-visible"):
-            search.hide()
+            search.clear()
+            return
+        if self._search_query:
+            search.clear()
             return
         if self._agent_filter:
             self._agent_filter.clear()

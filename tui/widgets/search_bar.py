@@ -36,7 +36,11 @@ class SearchBar(Input):
         self.add_class("-visible")
         self.focus()
 
-    def hide(self) -> None:
+    def dismiss(self) -> None:
+        """Hide the search bar but keep the current query active."""
+        self.remove_class("-visible")
+
+    def clear(self) -> None:
         """Hide the search bar and clear the query."""
         self.remove_class("-visible")
         self.value = ""
@@ -47,5 +51,5 @@ class SearchBar(Input):
         self.post_message(self.SearchChanged(self.value))
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Hide on Enter — search is live as you type."""
-        self.hide()
+        """Dismiss on Enter — keep the filter active."""
+        self.dismiss()
