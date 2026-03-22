@@ -212,35 +212,38 @@
     agentRoster.innerHTML = '';
     if (!agents || agents.length === 0) return;
 
-    // Detect duplicate types for ID suffix display
-    const typeCounts = {};
+    // Group agents by type, summing message counts
+    const byType = {};
     agents.forEach((a) => {
-      typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
+      if (!byType[a.type]) {
+        byType[a.type] = { type: a.type, messageCount: 0, agentIds: [] };
+      }
+      byType[a.type].messageCount += a.messageCount;
+      byType[a.type].agentIds.push(a.agentId);
     });
 
-    agents
+    Object.values(byType)
       .sort((a, b) => b.messageCount - a.messageCount)
-      .forEach((agent) => {
+      .forEach((group) => {
         const el = createEl('div', 'roster-agent');
-        el.dataset.agentId = agent.agentId;
+        el.dataset.agentType = group.type;
 
-        const color = getAgentColor(agent.type);
-        const label = getAgentLabel(agent.type);
-        const showSuffix = typeCounts[agent.type] > 1;
-        const suffix = showSuffix ? agent.agentId.slice(-4) : '';
+        const color = getAgentColor(group.type);
+        const label = getAgentLabel(group.type);
+        const instanceCount = group.agentIds.length > 1 ? ` <span class="roster-id-suffix">×${group.agentIds.length}</span>` : '';
 
         el.innerHTML =
           `<span class="roster-dot" style="background:${color}"></span>` +
-          `<span class="roster-name">${esc(label)}${suffix ? ` <span class="roster-id-suffix">#${suffix}</span>` : ''}</span>` +
-          `<span class="roster-count">${agent.messageCount}</span>`;
+          `<span class="roster-name">${esc(label)}${instanceCount}</span>` +
+          `<span class="roster-count">${group.messageCount}</span>`;
 
         el.addEventListener('click', () => {
-          if (state.agentFilter === agent.agentId) {
+          if (state.agentFilter === group.type) {
             state.agentFilter = null;
             el.classList.remove('active-filter');
           } else {
             document.querySelectorAll('.roster-agent.active-filter').forEach((e) => e.classList.remove('active-filter'));
-            state.agentFilter = agent.agentId;
+            state.agentFilter = group.type;
             el.classList.add('active-filter');
           }
           applyFilters();
@@ -304,6 +307,7 @@
   function buildMessageEl(msg) {
     const el = createEl('div', 'message');
     el.dataset.agentId = msg.agentId || '';
+    el.dataset.agentType = msg.agentType || '';
     el.dataset.uuid = msg.uuid || '';
 
     const color = getAgentColor(msg.agentType);
@@ -380,12 +384,12 @@
   function applyFilters() {
     const messages = chatMessages.querySelectorAll('.message');
     const query = state.searchQuery;
-    const agentId = state.agentFilter;
+    const filterType = state.agentFilter;
 
     messages.forEach((el) => {
       let visible = true;
 
-      if (agentId && el.dataset.agentId !== agentId) {
+      if (filterType && el.dataset.agentType !== filterType) {
         visible = false;
       }
 
