@@ -94,3 +94,32 @@ async def test_chat_view_apply_search_filter(sample_meeting, sample_agent_types)
         await pilot.pause()
         assert chat.message_count < original_count
         assert chat.message_count > 0
+
+
+async def test_chat_view_empty_state_on_launch():
+    """Chat view shows placeholder when no meeting is loaded."""
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        await pilot.pause()
+        # Should have a placeholder widget
+        placeholders = chat.query(".empty-state")
+        assert len(placeholders) == 1
+        assert "Select a meeting" in str(placeholders.first().content)
+
+
+async def test_chat_view_empty_state_on_filter(sample_meeting, sample_agent_types):
+    """Chat view shows 'no results' when filters produce zero matches."""
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_meeting(sample_meeting, sample_agent_types)
+        await pilot.pause()
+        assert chat.message_count > 0
+        # Apply a search that matches nothing
+        chat.apply_filters(search_query="zzz_no_match_zzz")
+        await pilot.pause()
+        assert chat.message_count == 0
+        placeholders = chat.query(".empty-state")
+        assert len(placeholders) == 1
+        assert "No messages match" in str(placeholders.first().content)

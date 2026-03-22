@@ -78,6 +78,9 @@ class ChatView(VerticalScroll):
     }
     """
 
+    EMPTY_STATE_HINT = "Select a meeting from the tree"
+    EMPTY_FILTER_HINT = "No messages match current filters"
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.message_count = 0
@@ -101,12 +104,23 @@ class ChatView(VerticalScroll):
         self._agent_filter = agent_filter or set()
         self._render_messages()
 
+    def on_mount(self) -> None:
+        """Show initial empty state on mount."""
+        if not self._meeting_data:
+            self._show_empty_state(self.EMPTY_STATE_HINT)
+
+    def _show_empty_state(self, text: str) -> None:
+        """Display a centered placeholder message."""
+        self.remove_children()
+        self.mount(Static(f"[dim]{text}[/]", classes="empty-state"))
+
     def _render_messages(self) -> None:
         """Build message widgets from meeting data."""
         self.remove_children()
         self.message_count = 0
 
         if not self._meeting_data:
+            self._show_empty_state(self.EMPTY_STATE_HINT)
             return
 
         messages = [m for m in self._meeting_data.get("messages", []) if not is_empty_message(m)]
@@ -120,6 +134,10 @@ class ChatView(VerticalScroll):
             messages = [m for m in messages if matches_search(m, self._search_query)]
 
         self.message_count = len(messages)
+
+        if self.message_count == 0:
+            self._show_empty_state(self.EMPTY_FILTER_HINT)
+            return
 
         prev_agent = None
         for msg in messages:
