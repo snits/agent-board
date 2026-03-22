@@ -43,7 +43,6 @@ class NavTree(Tree):
     NavTree {
         width: 1fr;
         min-width: 20;
-        dock: left;
         border-right: solid $surface-lighten-2;
         padding: 0;
     }

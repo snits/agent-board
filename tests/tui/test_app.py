@@ -85,6 +85,21 @@ async def test_full_flow_expand_and_select(data_dir, sample_session):
         assert len(bar.breadcrumb_parts) == 3
 
 
+async def test_chat_view_visible_in_layout(data_dir):
+    """ChatView must be positioned within the visible screen area."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test(size=(80, 24)) as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        # Both panels must be within the 80-column screen
+        assert tree.region.x >= 0
+        assert tree.region.x + tree.region.width <= 80
+        assert chat.region.x >= 0
+        assert chat.region.x + chat.region.width <= 80
+        # Chat must not be pushed off-screen by the tree
+        assert chat.region.x < 80, f"ChatView starts at x={chat.region.x}, off-screen"
+
+
 async def test_tool_toggle(data_dir, sample_session):
     """Test that 't' toggles tool use detail."""
     app = AgentBoardApp(data_dir=data_dir)
