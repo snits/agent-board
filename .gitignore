@@ -8,3 +8,4 @@ __pycache__/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+agent_board.egg-info/
