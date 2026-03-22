@@ -34,8 +34,8 @@ class AgentBoardApp(App):
         Binding("t", "toggle_tools", "Toggle tools"),
         Binding("tab", "switch_focus", "Switch panel", show=False),
         Binding("escape", "escape", "Back", show=False, priority=True),
-        Binding("n", "next_meeting", "Next meeting", show=False),
-        Binding("p", "prev_meeting", "Prev meeting", show=False),
+        Binding("n", "next_meeting", "Next meeting"),
+        Binding("p", "prev_meeting", "Prev meeting"),
     ]
 
     def __init__(self, data_dir: Path | str = "data", **kwargs) -> None:
@@ -182,7 +182,24 @@ class AgentBoardApp(App):
             return
         new_idx = current_idx + direction
         if 0 <= new_idx < len(meetings):
-            self._load_meeting(meetings[new_idx])
+            new_meeting = meetings[new_idx]
+            self._load_meeting(new_meeting)
+            # Sync tree cursor to match the navigated meeting
+            self._select_tree_node_for_meeting(tree, new_meeting.meeting_id)
+
+    def _select_tree_node_for_meeting(
+        self, tree: NavTree, meeting_id: str
+    ) -> None:
+        """Find and select the tree node matching a meeting ID."""
+        for project_node in tree.root.children:
+            for session_node in project_node.children:
+                for meeting_leaf in session_node.children:
+                    if (
+                        isinstance(meeting_leaf.data, MeetingNode)
+                        and meeting_leaf.data.meeting_id == meeting_id
+                    ):
+                        tree.move_cursor(meeting_leaf)
+                        return
 
     @on(SearchBar.SearchChanged)
     def on_search_changed(self, event: SearchBar.SearchChanged) -> None:

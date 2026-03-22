@@ -220,6 +220,48 @@ def sample_empty_meeting():
 
 
 @pytest.fixture
+def sample_meeting_002():
+    """Second meeting for navigation tests."""
+    return {
+        "id": "mtg-002",
+        "teamName": "Review Team",
+        "startTime": "2026-03-20T10:30:00.000Z",
+        "endTime": "2026-03-20T11:00:00.000Z",
+        "agents": [
+            {
+                "agentId": "agent-ccc",
+                "type": "code-reviewer",
+                "messageCount": 2,
+            },
+        ],
+        "messages": [
+            {
+                "uuid": "msg-006",
+                "parentUuid": None,
+                "agentId": "agent-ccc",
+                "role": "user",
+                "content": "Review the implementation.",
+                "toolUse": [],
+                "timestamp": "2026-03-20T10:30:00.000Z",
+                "promptId": "mtg-002",
+                "agentType": "code-reviewer",
+            },
+            {
+                "uuid": "msg-007",
+                "parentUuid": "msg-006",
+                "agentId": "agent-ccc",
+                "role": "assistant",
+                "content": "The code looks good overall.",
+                "toolUse": [],
+                "timestamp": "2026-03-20T10:31:00.000Z",
+                "promptId": "mtg-002",
+                "agentType": "code-reviewer",
+            },
+        ],
+    }
+
+
+@pytest.fixture
 def data_dir(tmp_path, sample_index, sample_agent_types, sample_session, sample_meeting):
     """Create a complete data directory matching the preprocessor output structure."""
     # Write index.json
@@ -235,5 +277,25 @@ def data_dir(tmp_path, sample_index, sample_agent_types, sample_session, sample_
 
     (session_dir / "session.json").write_text(json.dumps(sample_session))
     (meetings_dir / "mtg-001.json").write_text(json.dumps(sample_meeting))
+
+    return tmp_path
+
+
+@pytest.fixture
+def data_dir_two_meetings(
+    tmp_path, sample_index, sample_agent_types, sample_session,
+    sample_meeting, sample_meeting_002,
+):
+    """Data directory with two meeting files for navigation tests."""
+    (tmp_path / "index.json").write_text(json.dumps(sample_index))
+    (tmp_path / "agent-types.json").write_text(json.dumps(sample_agent_types))
+
+    session_dir = tmp_path / "sessions" / "sess-001"
+    meetings_dir = session_dir / "meetings"
+    meetings_dir.mkdir(parents=True)
+
+    (session_dir / "session.json").write_text(json.dumps(sample_session))
+    (meetings_dir / "mtg-001.json").write_text(json.dumps(sample_meeting))
+    (meetings_dir / "mtg-002.json").write_text(json.dumps(sample_meeting_002))
 
     return tmp_path
