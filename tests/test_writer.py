@@ -51,6 +51,15 @@ def test_write_session_creates_meeting_files(tmp_path):
     assert data["teamName"] == "design-meeting"
     assert len(data["messages"]) == 1
 
+    session_file = tmp_path / "sessions" / "session-123" / "session.json"
+    session_data = json.loads(session_file.read_text())
+    assert "meetings" in session_data
+    assert len(session_data["meetings"]) == 1
+    assert session_data["meetings"][0]["id"] == "prompt-A"
+    assert session_data["meetings"][0]["teamName"] == "design-meeting"
+    assert session_data["meetings"][0]["agentCount"] == 1
+    assert session_data["meetings"][0]["messageCount"] == 1
+
 
 def test_write_index(tmp_path):
     """Index file contains project and session info."""
