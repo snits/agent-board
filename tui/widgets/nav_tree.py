@@ -34,6 +34,7 @@ class MeetingNode:
     project_display_name: str
     team_name: str
     message_count: int
+    session_start_time: str = ""
 
 
 class NavTree(Tree):
@@ -90,6 +91,8 @@ class NavTree(Tree):
             return
         session_node_data.loaded = True
 
+        session_start = session_data.get("startTime", "")
+
         for meeting in session_data.get("meetings", []):
             label = f"{meeting['teamName']} ({meeting['messageCount']} msgs)"
             meeting_data = MeetingNode(
@@ -99,6 +102,7 @@ class NavTree(Tree):
                 project_display_name=session_node_data.project_display_name,
                 team_name=meeting["teamName"],
                 message_count=meeting["messageCount"],
+                session_start_time=session_start,
             )
             node.add_leaf(label, data=meeting_data)
 

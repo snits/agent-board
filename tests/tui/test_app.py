@@ -83,6 +83,10 @@ async def test_full_flow_expand_and_select(data_dir, sample_session):
         assert chat.message_count > 0
         # Agent bar should have breadcrumb
         assert len(bar.breadcrumb_parts) == 3
+        # Breadcrumb should use timestamp, not session ID hash
+        session_part = bar.breadcrumb_parts[1]
+        assert "2026-03-20" in session_part
+        assert "sess-001" not in session_part
 
 
 async def test_chat_view_visible_in_layout(data_dir):

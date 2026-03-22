@@ -88,9 +88,12 @@ class AgentBoardApp(App):
             return
 
         # Update agent bar
+        session_label = meeting_node.session_start_time[:16].replace("T", " ")
+        if not session_label:
+            session_label = meeting_node.session_id[:8]
         breadcrumb = [
             meeting_node.project_display_name,
-            meeting_node.session_id[:8],
+            session_label,
             meeting_node.team_name,
         ]
         self.query_one(AgentBar).update_meeting(
