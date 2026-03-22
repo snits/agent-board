@@ -23,6 +23,8 @@ class AgentBar(Static):
         self.agent_types: dict = {}
         self.breadcrumb_parts: list[str] = []
         self._filter_type: str | None = None
+        self._filter_position: int | None = None
+        self._filter_total: int | None = None
         self._markup: str = ""
 
     def update_meeting(
@@ -55,6 +57,8 @@ class AgentBar(Static):
         self.agent_types = {}
         self.breadcrumb_parts = []
         self._filter_type = None
+        self._filter_position = None
+        self._filter_total = None
         self._refresh_content()
 
     def _refresh_content(self) -> None:
