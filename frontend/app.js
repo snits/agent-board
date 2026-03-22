@@ -140,12 +140,12 @@
     // Lazy-load session data
     if (!state.sessionCache[sessionId]) {
       const meetingsContainer = sessionEl.querySelector('.tree-children');
-      meetingsContainer.innerHTML = '<div style="padding: 6px 44px; color: var(--text-muted); font-size: 12px;">Loading…</div>';
+      meetingsContainer.innerHTML = '<div class="tree-status">Loading…</div>';
       try {
         const data = await fetchJSON(`/data/sessions/${sessionId}/session.json`);
         state.sessionCache[sessionId] = data;
       } catch (err) {
-        meetingsContainer.innerHTML = `<div style="padding: 6px 44px; color: var(--accent-red); font-size: 12px;">Failed to load</div>`;
+        meetingsContainer.innerHTML = '<div class="tree-status tree-error">Failed to load</div>';
         return;
       }
     }
@@ -183,7 +183,9 @@
   async function loadMeeting(sessionId, meetingId, meetingName) {
     // Update active state in sidebar
     document.querySelectorAll('.tree-meeting.active').forEach((el) => el.classList.remove('active'));
-    const activeEl = document.querySelector(`.tree-meeting[data-meeting-id="${meetingId}"]`);
+    const activeEl = [...document.querySelectorAll('.tree-meeting')].find(
+      (el) => el.dataset.meetingId === meetingId
+    );
     if (activeEl) activeEl.classList.add('active');
 
     state.currentSessionId = sessionId;
@@ -268,13 +270,15 @@
     const messages = meeting.messages;
     const total = messages.length;
     const BATCH_SIZE = 50;
-    let index = 0;
 
-    const fragment = document.createDocumentFragment();
+    // Skip per-message animation for large meetings to avoid jank
+    chatMessages.classList.toggle('batch-rendered', total > BATCH_SIZE);
+    let index = 0;
 
     showProgress(0, total);
 
     function renderBatch() {
+      const fragment = document.createDocumentFragment();
       const end = Math.min(index + BATCH_SIZE, total);
       for (let i = index; i < end; i++) {
         fragment.appendChild(buildMessageEl(messages[i]));
