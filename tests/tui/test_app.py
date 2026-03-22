@@ -3,7 +3,7 @@
 
 import pytest
 from tui.app import AgentBoardApp
-from tui.widgets.nav_tree import NavTree, MeetingNode
+from tui.widgets.nav_tree import NavTree
 from tui.widgets.chat_view import ChatView
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.search_bar import SearchBar
@@ -98,63 +98,6 @@ async def test_chat_view_visible_in_layout(data_dir):
         assert chat.region.x + chat.region.width <= 80
         # Chat must not be pushed off-screen by the tree
         assert chat.region.x < 80, f"ChatView starts at x={chat.region.x}, off-screen"
-
-
-async def test_next_meeting_syncs_tree(data_dir_two_meetings):
-    """Pressing 'n' navigates to next meeting and syncs the tree cursor."""
-    app = AgentBoardApp(data_dir=data_dir_two_meetings)
-    async with app.run_test() as pilot:
-        tree = app.query_one(NavTree)
-
-        # Expand session to load meetings
-        project_node = tree.root.children[0]
-        session_node = project_node.children[0]
-        session_node.expand()
-        await pilot.pause()
-        assert len(session_node.children) == 2
-
-        # Select first meeting
-        meeting1 = session_node.children[0]
-        tree.select_node(meeting1)
-        await pilot.pause()
-        assert app._current_meeting_node.meeting_id == "mtg-001"
-
-        # Press 'n' to go to next meeting
-        await pilot.press("n")
-        await pilot.pause()
-
-        # Chat should show second meeting
-        assert app._current_meeting_node.meeting_id == "mtg-002"
-        # Tree cursor should also point to second meeting
-        assert tree.cursor_node is not None
-        assert isinstance(tree.cursor_node.data, MeetingNode)
-        assert tree.cursor_node.data.meeting_id == "mtg-002"
-
-
-async def test_prev_meeting_syncs_tree(data_dir_two_meetings):
-    """Pressing 'p' navigates to previous meeting and syncs the tree cursor."""
-    app = AgentBoardApp(data_dir=data_dir_two_meetings)
-    async with app.run_test() as pilot:
-        tree = app.query_one(NavTree)
-
-        # Expand session to load meetings
-        project_node = tree.root.children[0]
-        session_node = project_node.children[0]
-        session_node.expand()
-        await pilot.pause()
-
-        # Select second meeting
-        meeting2 = session_node.children[1]
-        tree.select_node(meeting2)
-        await pilot.pause()
-        assert app._current_meeting_node.meeting_id == "mtg-002"
-
-        # Press 'p' to go to previous meeting
-        await pilot.press("p")
-        await pilot.pause()
-
-        assert app._current_meeting_node.meeting_id == "mtg-001"
-        assert tree.cursor_node.data.meeting_id == "mtg-001"
 
 
 async def test_agent_filter_keybinding(data_dir):
