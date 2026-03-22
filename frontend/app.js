@@ -24,7 +24,6 @@
   const projectTree = $('#project-tree');
   const chatMessages = $('#chat-messages');
   const chatHeader = $('#meeting-title');
-  const emptyState = $('#empty-state');
   const searchInput = $('#search-input');
   const rosterPanel = $('#roster-panel');
   const agentRoster = $('#agent-roster');
@@ -114,7 +113,7 @@
 
         sLabelEl.addEventListener('click', (e) => {
           e.stopPropagation();
-          toggleSession(sessionEl, session.id, project.slug);
+          toggleSession(sessionEl, session.id);
         });
 
         childrenEl.appendChild(sessionEl);
@@ -130,7 +129,7 @@
     });
   }
 
-  async function toggleSession(sessionEl, sessionId, projectSlug) {
+  async function toggleSession(sessionEl, sessionId) {
     if (sessionEl.classList.contains('expanded')) {
       sessionEl.classList.remove('expanded');
       return;
