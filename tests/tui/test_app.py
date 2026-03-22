@@ -355,6 +355,102 @@ async def test_np_bindings_visible_in_footer(data_dir):
         assert bindings["p"].show is True
 
 
+async def test_search_enter_preserves_results(data_dir):
+    """Enter dismisses search bar but chat view stays filtered."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        search = app.query_one(SearchBar)
+
+        # Load a meeting
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        session_node.expand()
+        await pilot.pause()
+        meeting_leaf = session_node.children[0]
+        tree.select_node(meeting_leaf)
+        await pilot.pause()
+        full_count = chat.message_count
+
+        # Search for something that matches a subset
+        await pilot.press("slash")
+        await pilot.pause()
+        search.value = "Textual"
+        await pilot.pause()
+        filtered_count = chat.message_count
+        assert filtered_count < full_count
+
+        # Enter should dismiss search bar but keep results filtered
+        await pilot.press("enter")
+        await pilot.pause()
+        assert not search.has_class("-visible")
+        assert chat.message_count == filtered_count
+
+
+async def test_escape_clears_dismissed_search(data_dir):
+    """Escape clears a dismissed-but-active search filter."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        search = app.query_one(SearchBar)
+
+        # Load a meeting
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        session_node.expand()
+        await pilot.pause()
+        meeting_leaf = session_node.children[0]
+        tree.select_node(meeting_leaf)
+        await pilot.pause()
+        full_count = chat.message_count
+
+        # Search and dismiss with Enter
+        await pilot.press("slash")
+        await pilot.pause()
+        search.value = "Textual"
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert not search.has_class("-visible")
+        assert chat.message_count < full_count
+
+        # Escape should clear the dismissed search and restore all results
+        await pilot.press("escape")
+        await pilot.pause()
+        assert chat.message_count == full_count
+
+
+async def test_filter_cycle_shows_position(data_dir):
+    """Cycling filters with 'f' shows position indicator like [1/N]."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        bar = app.query_one(AgentBar)
+
+        # Load a meeting
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        session_node.expand()
+        await pilot.pause()
+        meeting_leaf = session_node.children[0]
+        tree.select_node(meeting_leaf)
+        await pilot.pause()
+
+        # Press 'f' to activate first filter
+        await pilot.press("f")
+        await pilot.pause()
+        markup = str(bar._markup)
+        assert "[1/" in markup
+
+        # Press 'f' again to cycle
+        await pilot.press("f")
+        await pilot.pause()
+        markup = str(bar._markup)
+        assert "[2/" in markup
+
+
 async def test_tool_toggle(data_dir, sample_session):
     """Test that 't' toggles tool use detail."""
     app = AgentBoardApp(data_dir=data_dir)
