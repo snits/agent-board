@@ -270,7 +270,10 @@
       return;
     }
 
-    const messages = meeting.messages;
+    // Filter out empty messages (tool result plumbing with no content or tools)
+    const messages = meeting.messages.filter(
+      (msg) => (msg.content && msg.content.trim()) || (msg.toolUse && msg.toolUse.length > 0)
+    );
     const total = messages.length;
     const BATCH_SIZE = 50;
 
