@@ -58,6 +58,10 @@ class AgentBoardApp(App):
         yield SearchBar(id="search-bar")
         yield Footer()
 
+    def on_mount(self) -> None:
+        """Set initial focus to the nav tree."""
+        self.query_one("#nav-tree", NavTree).focus()
+
     @on(Tree.NodeExpanded)
     def on_tree_expand(self, event: Tree.NodeExpanded) -> None:
         """Lazy-load session meetings when a session node is expanded."""

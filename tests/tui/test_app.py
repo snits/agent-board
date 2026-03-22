@@ -53,3 +53,49 @@ async def test_escape_hides_search_bar(data_dir):
         await pilot.press("escape")
         await pilot.pause()
         assert not search.has_class("-visible")
+
+
+async def test_full_flow_expand_and_select(data_dir, sample_session):
+    """Test expanding a session node loads meetings, selecting one loads chat."""
+    import json
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        bar = app.query_one(AgentBar)
+
+        # Expand first project
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+
+        # Simulate expanding the session node
+        session_node.expand()
+        await pilot.pause()
+
+        # Session should now have meeting children
+        assert len(session_node.children) == 2
+
+        # Select the first meeting
+        meeting_leaf = session_node.children[0]
+        tree.select_node(meeting_leaf)
+        await pilot.pause()
+
+        # Chat should have loaded messages
+        assert chat.message_count > 0
+        # Agent bar should have breadcrumb
+        assert len(bar.breadcrumb_parts) == 3
+
+
+async def test_tool_toggle(data_dir, sample_session):
+    """Test that 't' toggles tool use detail."""
+    import json
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        assert chat._tool_expanded is False
+        await pilot.press("t")
+        await pilot.pause()
+        assert chat._tool_expanded is True
+        await pilot.press("t")
+        await pilot.pause()
+        assert chat._tool_expanded is False
