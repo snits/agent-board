@@ -57,7 +57,6 @@ async def test_escape_hides_search_bar(data_dir):
 
 async def test_full_flow_expand_and_select(data_dir, sample_session):
     """Test expanding a session node loads meetings, selecting one loads chat."""
-    import json
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test() as pilot:
         tree = app.query_one(NavTree)
@@ -88,7 +87,6 @@ async def test_full_flow_expand_and_select(data_dir, sample_session):
 
 async def test_tool_toggle(data_dir, sample_session):
     """Test that 't' toggles tool use detail."""
-    import json
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test() as pilot:
         chat = app.query_one(ChatView)
