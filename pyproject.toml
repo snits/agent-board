@@ -1,0 +1,20 @@
+[project]
+name = "agent-board"
+version = "0.1.0"
+description = "Viewer for Claude Code agent team transcripts"
+requires-python = ">=3.12"
+dependencies = [
+    "textual>=1.0",
+]
+
+[project.scripts]
+agent-board-tui = "tui.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["tui*", "preprocessor*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+]

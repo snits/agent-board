@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--skip-preprocess", action="store_true", help="Skip preprocessing, serve existing data")
     parser.add_argument("--output", type=Path, default=Path("data"))
+    parser.add_argument("--tui", action="store_true", help="Launch terminal UI instead of web server")
     args = parser.parse_args()
 
     if not args.skip_preprocess:
@@ -44,6 +45,11 @@ def main():
         print("Preprocessing transcripts...")
         run_preprocess(args.source, args.output)
         print()
+
+    if args.tui:
+        from tui.app import AgentBoardApp
+        AgentBoardApp(data_dir=args.output).run()
+        return
 
     project_root = str(Path(__file__).parent)
     socketserver.TCPServer.allow_reuse_address = True
