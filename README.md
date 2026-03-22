@@ -1,6 +1,6 @@
 # Agent Board
 
-A web-based viewer for Claude Code agent team transcripts. Browse multi-agent conversations with a dark ops-center UI — see what your agent teams were doing, how they collaborated, and what tools they used.
+A viewer for Claude Code agent team transcripts. Browse multi-agent conversations — see what your agent teams were doing, how they collaborated, and what tools they used. Available as a web UI or terminal UI (TUI).
 
 ## Prerequisites
 
@@ -16,31 +16,44 @@ cd agent-board
 
 # Create a virtual environment and install dependencies
 uv venv .venv
-uv pip install pytest --python .venv/bin/python
+uv pip install pytest textual pytest-asyncio --python .venv/bin/python
 ```
 
 ## Usage
 
-### Quick start
+### Web UI
 
 ```bash
-# Preprocess transcripts and start the server
+# Preprocess transcripts and start the web server
 .venv/bin/python serve.py
 ```
 
 Then open http://localhost:8080 in your browser.
+
+### Terminal UI (TUI)
+
+```bash
+# Preprocess and launch the terminal viewer
+.venv/bin/python serve.py --tui
+
+# Or run the TUI standalone (requires preprocessed data in ./data/)
+.venv/bin/python -m tui
+```
+
+**TUI keybindings:** `q` quit, `/` search, `f` filter by agent, `t` toggle tool details, `Tab` switch panel, `n`/`p` next/prev meeting, `Esc` back
 
 By default, Agent Board scans `~/.claude/projects/` for agent team sessions.
 
 ### CLI options
 
 ```
-serve.py [--source PATH] [--output PATH] [--port PORT] [--skip-preprocess]
+serve.py [--source PATH] [--output PATH] [--port PORT] [--skip-preprocess] [--tui]
 
   --source PATH          Claude projects directory (default: ~/.claude/projects/)
   --output PATH          Preprocessed data output directory (default: ./data/)
   --port PORT            HTTP server port (default: 8080)
   --skip-preprocess      Skip preprocessing, serve existing data
+  --tui                  Launch terminal UI instead of web server
 ```
 
 ### Preprocessing only
@@ -57,7 +70,9 @@ Agent Board has two parts:
 
 1. **Preprocessor** (`preprocess.py`, `preprocessor/`) — Scans Claude Code's project storage, parses agent JSONL transcripts, groups messages into meetings by `promptId`, deduplicates broadcast messages, and writes per-meeting JSON files.
 
-2. **Frontend** (`frontend/`, `serve.py`) — A vanilla HTML/CSS/JS viewer served by a Python HTTP server. Three-panel layout: sidebar navigation, chat message stream, and agent roster.
+2. **Web Frontend** (`frontend/`, `serve.py`) — A vanilla HTML/CSS/JS viewer served by a Python HTTP server. Three-panel layout: sidebar navigation, chat message stream, and agent roster.
+
+3. **Terminal UI** (`tui/`) — A Textual-based TUI with keyboard-driven navigation. Two-panel layout: project/session/meeting tree (left) and chat message stream (right), with agent roster header bar and search.
 
 ### Data flow
 
@@ -94,6 +109,11 @@ agent-board/
   │   ├── index.html         # Three-panel layout
   │   ├── style.css          # Dark theme
   │   └── app.js             # Application logic
+  ├── tui/
+  │   ├── app.py             # Textual app composition and keybindings
+  │   ├── data.py            # JSON data loading layer
+  │   ├── __main__.py        # Entry point for python -m tui
+  │   └── widgets/           # Nav tree, chat view, agent bar, search bar
   ├── tests/                 # pytest test suite
   └── data/                  # Generated output (gitignored)
 ```
