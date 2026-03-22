@@ -98,17 +98,17 @@ def write_session(output_dir: Path, session_info: dict) -> None:
 
     meeting_summaries = []
     for prompt_id, meeting in session_info["meetings"].items():
-        meeting_agents = {}
+        meeting_agent_types = set()
         for msg in meeting["messages"]:
-            aid = msg.get("agentId")
-            if aid:
-                meeting_agents[aid] = True
+            agent_type = msg.get("agentType")
+            if agent_type:
+                meeting_agent_types.add(agent_type)
         meeting_summaries.append({
             "id": prompt_id,
             "teamName": meeting["teamName"],
             "startTime": meeting.get("startTime"),
             "endTime": meeting.get("endTime"),
-            "agentCount": len(meeting_agents),
+            "agentCount": len(meeting_agent_types),
             "messageCount": len(meeting["messages"]),
         })
 
@@ -117,7 +117,7 @@ def write_session(output_dir: Path, session_info: dict) -> None:
         "startTime": all_timestamps[0] if all_timestamps else None,
         "endTime": all_timestamps[-1] if all_timestamps else None,
         "meetingCount": len(session_info["meetings"]),
-        "agentCount": len(agent_meta),
+        "agentCount": len({m.get("agentType", "unknown") for m in agent_meta.values()}),
         "meetings": meeting_summaries,
     }
     (session_dir / "session.json").write_text(json.dumps(session_meta, indent=2))

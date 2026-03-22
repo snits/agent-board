@@ -110,12 +110,13 @@ def run_preprocess(source_dir: Path, output_dir: Path) -> None:
             session_data = process_session(session, team_names, agent_meta)
             write_session(output_dir, session_data)
 
+            unique_types = {m.get("agentType", "unknown") for m in agent_meta.values()}
             index_sessions.append({
                 "id": session["id"],
                 "startTime": session_data.get("startTime"),
                 "endTime": session_data.get("endTime"),
                 "meetingCount": len(session_data["meetings"]),
-                "agentCount": len(agent_meta),
+                "agentCount": len(unique_types),
             })
 
         index_projects.append({
