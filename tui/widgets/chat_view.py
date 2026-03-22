@@ -76,6 +76,16 @@ class ChatView(VerticalScroll):
         width: 3fr;
         min-width: 40;
     }
+    ChatView .msg-user {
+        border-left: thick $accent-darken-2;
+        padding-left: 1;
+        color: $text-muted;
+    }
+    ChatView .empty-state {
+        margin-top: 2;
+        text-align: center;
+        width: 100%;
+    }
     """
 
     EMPTY_STATE_HINT = "Select a meeting from the tree"

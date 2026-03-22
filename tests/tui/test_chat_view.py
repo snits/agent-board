@@ -96,6 +96,21 @@ async def test_chat_view_apply_search_filter(sample_meeting, sample_agent_types)
         assert chat.message_count > 0
 
 
+async def test_chat_view_user_messages_have_class(sample_meeting, sample_agent_types):
+    """User messages get the msg-user CSS class for visual distinction."""
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_meeting(sample_meeting, sample_agent_types)
+        await pilot.pause()
+        user_msgs = chat.query(".msg-user")
+        assert len(user_msgs) > 0
+        # Verify assistant messages don't have the class
+        all_content = chat.query(".msg-content")
+        assistant_msgs = [w for w in all_content if not w.has_class("msg-user")]
+        assert len(assistant_msgs) > 0
+
+
 async def test_chat_view_empty_state_on_launch():
     """Chat view shows placeholder when no meeting is loaded."""
     app = ChatViewApp()
