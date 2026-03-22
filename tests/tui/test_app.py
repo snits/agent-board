@@ -128,6 +128,25 @@ async def test_tab_switches_focus_chat_to_nav(data_dir):
         assert nav.has_focus_within
 
 
+async def test_tab_round_trip(data_dir):
+    """Tab cycles nav → chat → nav without getting stuck."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        nav = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        nav.focus()
+        await pilot.pause()
+        assert nav.has_focus_within
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert chat.has_focus_within
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert nav.has_focus_within
+
+
 async def test_tab_from_search_bar_goes_to_nav(data_dir):
     """Tab from search bar sends focus to nav tree."""
     app = AgentBoardApp(data_dir=data_dir)
