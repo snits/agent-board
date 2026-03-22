@@ -14,9 +14,9 @@ A viewer for Claude Code agent team transcripts. Browse multi-agent conversation
 git clone <repo-url>
 cd agent-board
 
-# Create a virtual environment and install dependencies
+# Create a virtual environment and install
 uv venv .venv
-uv pip install pytest textual pytest-asyncio --python .venv/bin/python
+uv pip install -e ".[dev]" --python .venv/bin/python
 ```
 
 ## Usage
