@@ -9,3 +9,4 @@ __pycache__/
 .dolt/
 *.db
 agent_board.egg-info/
+build/
