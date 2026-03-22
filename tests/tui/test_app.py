@@ -227,6 +227,68 @@ async def test_prev_meeting_syncs_tree(data_dir_two_meetings):
         assert tree.cursor_node.data.meeting_id == "mtg-001"
 
 
+async def test_next_meeting_at_end_stays_put(data_dir_two_meetings):
+    """Pressing 'n' on the last meeting does not change the view."""
+    app = AgentBoardApp(data_dir=data_dir_two_meetings)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+
+        # Expand and select the last meeting
+        project_node = tree.root.children[0]
+        project_node.expand()
+        await pilot.pause()
+        session_node = project_node.children[0]
+        session_node.expand()
+        await pilot.pause()
+
+        meeting2 = session_node.children[1]
+        tree.select_node(meeting2)
+        await pilot.pause()
+        assert app._current_meeting_node.meeting_id == "mtg-002"
+
+        # Press 'n' — should stay on the last meeting
+        await pilot.press("n")
+        await pilot.pause()
+        assert app._current_meeting_node.meeting_id == "mtg-002"
+        assert tree.cursor_node.data.meeting_id == "mtg-002"
+
+
+async def test_prev_meeting_at_start_stays_put(data_dir_two_meetings):
+    """Pressing 'p' on the first meeting does not change the view."""
+    app = AgentBoardApp(data_dir=data_dir_two_meetings)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+
+        # Expand and select the first meeting
+        project_node = tree.root.children[0]
+        project_node.expand()
+        await pilot.pause()
+        session_node = project_node.children[0]
+        session_node.expand()
+        await pilot.pause()
+
+        meeting1 = session_node.children[0]
+        tree.select_node(meeting1)
+        await pilot.pause()
+        assert app._current_meeting_node.meeting_id == "mtg-001"
+
+        # Press 'p' — should stay on the first meeting
+        await pilot.press("p")
+        await pilot.pause()
+        assert app._current_meeting_node.meeting_id == "mtg-001"
+        assert tree.cursor_node.data.meeting_id == "mtg-001"
+
+
+async def test_np_bindings_visible_in_footer(data_dir):
+    """The n/p keybindings should be visible in the footer."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        # Check that n and p bindings have show=True (default)
+        bindings = {b.key: b for b in app.BINDINGS}
+        assert bindings["n"].show is True
+        assert bindings["p"].show is True
+
+
 async def test_tool_toggle(data_dir, sample_session):
     """Test that 't' toggles tool use detail."""
     app = AgentBoardApp(data_dir=data_dir)
