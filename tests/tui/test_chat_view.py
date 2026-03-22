@@ -69,3 +69,28 @@ async def test_chat_view_filters_empty_messages(sample_empty_meeting, sample_age
         await pilot.pause()
         # Only 1 message should render (the one with content)
         assert chat.message_count == 1
+
+
+async def test_chat_view_toggle_tool_detail(sample_meeting, sample_agent_types):
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_meeting(sample_meeting, sample_agent_types)
+        await pilot.pause()
+        assert chat._tool_expanded is False
+        chat.toggle_tool_detail()
+        await pilot.pause()
+        assert chat._tool_expanded is True
+
+
+async def test_chat_view_apply_search_filter(sample_meeting, sample_agent_types):
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_meeting(sample_meeting, sample_agent_types)
+        await pilot.pause()
+        original_count = chat.message_count
+        chat.apply_filters(search_query="Textual")
+        await pilot.pause()
+        assert chat.message_count < original_count
+        assert chat.message_count > 0
