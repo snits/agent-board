@@ -11,8 +11,8 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Tree
 
-from preprocess import run_preprocess
 from preprocessor.paths import default_data_dir, default_source_dir
+from preprocessor.pipeline import run_preprocess
 from tui.data import load_index, load_agent_types, load_session, load_meeting
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.chat_view import ChatView

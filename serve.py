@@ -6,9 +6,9 @@ import http.server
 import socketserver
 from pathlib import Path
 
-from preprocess import run_preprocess
 from preprocessor.config import load_config
 from preprocessor.paths import default_data_dir, default_source_dir
+from preprocessor.pipeline import run_preprocess
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
