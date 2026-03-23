@@ -82,13 +82,18 @@ def test_full_pipeline(tmp_path):
     assert len(index["projects"]) == 1
     assert index["projects"][0]["sessions"][0]["id"] == session_id
 
-    # Verify meeting file
-    meeting_file = output_dir / "sessions" / session_id / "meetings" / "prompt-111.json"
-    assert meeting_file.exists()
-    meeting = json.loads(meeting_file.read_text())
-    assert meeting["teamName"] == "design-meeting"
-    assert len(meeting["messages"]) == 3  # 2 from a1, 1 from a2
-    assert meeting["messages"][0]["timestamp"] < meeting["messages"][-1]["timestamp"]
+    # Verify messages.json (replaces per-meeting files)
+    messages_file = output_dir / "sessions" / session_id / "messages.json"
+    assert messages_file.exists()
+    messages = json.loads(messages_file.read_text())
+    assert len(messages) == 3  # 2 from a1, 1 from a2
+    assert messages[0]["timestamp"] < messages[-1]["timestamp"]
+    assert messages[0]["teamName"] == "design-meeting"
+
+    # Verify no meetings/ directory
+    assert not (output_dir / "sessions" / session_id / "meetings").exists()
+
+    assert "meetingCount" not in index["projects"][0]["sessions"][0]
 
     # Verify agent types
     types = json.loads((output_dir / "agent-types.json").read_text())

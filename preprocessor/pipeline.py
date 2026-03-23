@@ -6,7 +6,7 @@ from pathlib import Path
 
 from preprocessor.scanner import scan_projects
 from preprocessor.parser import parse_record
-from preprocessor.grouper import group_into_meetings
+from preprocessor.grouper import flatten_messages
 from preprocessor.writer import write_session, write_index, write_agent_types
 
 
@@ -75,25 +75,20 @@ def parse_agent_transcripts(subagents_dir: Path) -> list[dict]:
 
 
 def process_session(session: dict, team_names: dict, agent_meta: dict) -> dict:
-    """Process a single session into meeting data."""
+    """Process a single session into a flat message list."""
     subagents_dir = Path(session["subagentsDir"])
     records = parse_agent_transcripts(subagents_dir)
-    meetings = group_into_meetings(records, team_names)
+    messages = flatten_messages(records, team_names)
 
-    all_timestamps = []
-    for meeting in meetings.values():
-        if meeting.get("startTime"):
-            all_timestamps.append(meeting["startTime"])
-        if meeting.get("endTime"):
-            all_timestamps.append(meeting["endTime"])
-    all_timestamps.sort()
+    timestamps = [m["timestamp"] for m in messages if m.get("timestamp")]
+    timestamps.sort()
 
     return {
         "id": session["id"],
-        "meetings": meetings,
+        "messages": messages,
         "agentMeta": agent_meta,
-        "startTime": all_timestamps[0] if all_timestamps else None,
-        "endTime": all_timestamps[-1] if all_timestamps else None,
+        "startTime": timestamps[0] if timestamps else None,
+        "endTime": timestamps[-1] if timestamps else None,
     }
 
 
@@ -122,7 +117,6 @@ def run_preprocess(source_dir: Path, output_dir: Path) -> None:
                 "id": session["id"],
                 "startTime": session_data.get("startTime"),
                 "endTime": session_data.get("endTime"),
-                "meetingCount": len(session_data["meetings"]),
                 "agentCount": len(unique_types),
             })
 
@@ -135,7 +129,6 @@ def run_preprocess(source_dir: Path, output_dir: Path) -> None:
     write_index(output_dir, index_projects)
     write_agent_types(output_dir, all_agent_types)
 
-    total_meetings = sum(s["meetingCount"] for p in index_projects for s in p["sessions"])
     total_agents = sum(s["agentCount"] for p in index_projects for s in p["sessions"])
-    print(f"Processed {len(index_projects)} projects, {total_meetings} meetings, {total_agents} agents")
+    print(f"Processed {len(index_projects)} projects, {total_agents} agents")
     print(f"Output written to {output_dir}")
