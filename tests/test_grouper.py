@@ -1,8 +1,8 @@
-# ABOUTME: Tests for grouping parsed records into meetings by promptId.
+# ABOUTME: Tests for flattening parsed records into a sorted message list.
 # ABOUTME: Validates promptId inheritance via parentUuid chains.
 
 import pytest
-from preprocessor.grouper import group_into_meetings, resolve_prompt_id
+from preprocessor.grouper import flatten_messages, resolve_prompt_id
 
 
 def test_resolve_prompt_id_direct():
@@ -40,8 +40,8 @@ def test_resolve_prompt_id_orphan():
     assert resolve_prompt_id(records_by_uuid["uuid-1"], records_by_uuid) is None
 
 
-def test_group_into_meetings_basic():
-    """Groups records by promptId into meetings."""
+def test_flatten_messages_basic():
+    """Returns flat sorted list with teamName on each message."""
     records = [
         {"uuid": "u1", "promptId": "prompt-A", "parentUuid": None, "timestamp": "2026-03-21T22:00:00Z", "agentId": "a1", "role": "user", "content": "Hi", "toolUse": []},
         {"uuid": "u2", "promptId": None, "parentUuid": "u1", "timestamp": "2026-03-21T22:00:05Z", "agentId": "a1", "role": "assistant", "content": "Hello", "toolUse": []},
@@ -49,22 +49,34 @@ def test_group_into_meetings_basic():
     ]
     team_names = {"prompt-A": "design-meeting"}
 
-    meetings = group_into_meetings(records, team_names)
-    assert "prompt-A" in meetings
-    assert "prompt-B" in meetings
-    assert meetings["prompt-A"]["teamName"] == "design-meeting"
-    assert meetings["prompt-B"]["teamName"] == "Unnamed Meeting"
-    assert len(meetings["prompt-A"]["messages"]) == 2
-    assert len(meetings["prompt-B"]["messages"]) == 1
+    result = flatten_messages(records, team_names)
+    assert isinstance(result, list)
+    assert len(result) == 3
+    assert result[0]["content"] == "Hi"
+    assert result[1]["content"] == "Hello"
+    assert result[2]["content"] == "Meeting 2"
+    assert result[0]["teamName"] == "design-meeting"
+    assert result[1]["teamName"] == "design-meeting"
+    assert result[2]["teamName"] == "Unnamed Meeting"
 
 
-def test_group_into_meetings_sorted_by_timestamp():
-    """Messages within a meeting are sorted chronologically."""
+def test_flatten_messages_sorted_by_timestamp():
+    """Messages are sorted chronologically regardless of input order."""
     records = [
         {"uuid": "u2", "promptId": None, "parentUuid": "u1", "timestamp": "2026-03-21T22:00:10Z", "agentId": "a1", "role": "assistant", "content": "Second", "toolUse": []},
         {"uuid": "u1", "promptId": "prompt-A", "parentUuid": None, "timestamp": "2026-03-21T22:00:01Z", "agentId": "a1", "role": "user", "content": "First", "toolUse": []},
     ]
-    meetings = group_into_meetings(records, {})
-    msgs = meetings["prompt-A"]["messages"]
-    assert msgs[0]["content"] == "First"
-    assert msgs[1]["content"] == "Second"
+    result = flatten_messages(records, {})
+    assert result[0]["content"] == "First"
+    assert result[1]["content"] == "Second"
+
+
+def test_flatten_messages_drops_orphans():
+    """Records with no resolvable promptId are excluded."""
+    records = [
+        {"uuid": "u1", "promptId": None, "parentUuid": None, "timestamp": "2026-03-21T22:00:00Z", "agentId": "a1", "role": "user", "content": "Orphan", "toolUse": []},
+        {"uuid": "u2", "promptId": "prompt-A", "parentUuid": None, "timestamp": "2026-03-21T22:00:01Z", "agentId": "a1", "role": "user", "content": "Has prompt", "toolUse": []},
+    ]
+    result = flatten_messages(records, {})
+    assert len(result) == 1
+    assert result[0]["content"] == "Has prompt"

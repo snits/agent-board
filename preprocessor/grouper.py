@@ -1,5 +1,5 @@
-# ABOUTME: Groups parsed transcript records into meetings by promptId.
-# ABOUTME: Handles promptId inheritance via parentUuid chain walking.
+# ABOUTME: Flattens parsed transcript records into a sorted message list.
+# ABOUTME: Resolves promptId via parentUuid chain and attaches teamName.
 
 
 def resolve_prompt_id(record: dict, records_by_uuid: dict) -> str | None:
@@ -24,41 +24,20 @@ def resolve_prompt_id(record: dict, records_by_uuid: dict) -> str | None:
     return None
 
 
-def group_into_meetings(
+def flatten_messages(
     records: list[dict],
     team_names: dict[str, str],
-) -> dict[str, dict]:
-    """Group parsed records into meetings keyed by promptId."""
+) -> list[dict]:
+    """Flatten parsed records into a sorted message list with teamName."""
     records_by_uuid = {r["uuid"]: r for r in records if r.get("uuid")}
 
-    meetings: dict[str, list] = {}
+    result = []
     for record in records:
         prompt_id = resolve_prompt_id(record, records_by_uuid)
         if not prompt_id:
             continue
-        meetings.setdefault(prompt_id, []).append(record)
+        record["teamName"] = team_names.get(prompt_id, "Unnamed Meeting")
+        result.append(record)
 
-    result = {}
-    for prompt_id, msgs in meetings.items():
-        sorted_msgs = sorted(msgs, key=lambda m: m.get("timestamp", ""))
-
-        timestamps = [m["timestamp"] for m in sorted_msgs if m.get("timestamp")]
-        start_time = timestamps[0] if timestamps else None
-        end_time = timestamps[-1] if timestamps else None
-
-        agent_counts: dict[str, int] = {}
-        for m in sorted_msgs:
-            aid = m.get("agentId")
-            if aid:
-                agent_counts[aid] = agent_counts.get(aid, 0) + 1
-
-        result[prompt_id] = {
-            "id": prompt_id,
-            "teamName": team_names.get(prompt_id, "Unnamed Meeting"),
-            "startTime": start_time,
-            "endTime": end_time,
-            "agentIds": list(agent_counts.keys()),
-            "messages": sorted_msgs,
-        }
-
+    result.sort(key=lambda m: m.get("timestamp", ""))
     return result
