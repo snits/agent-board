@@ -32,3 +32,16 @@ def default_config_dir() -> Path:
 def default_source_dir() -> Path:
     """Return the default Claude projects directory."""
     return Path.home() / ".claude" / "projects"
+
+
+def default_archive_dir() -> Path | None:
+    """Return the default conversation archive directory, or None if it doesn't exist.
+
+    The superpowers episodic-memory plugin moves consumed session logs here.
+    """
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config_home:
+        archive = Path(xdg_config_home) / "superpowers" / "conversation-archive"
+    else:
+        archive = Path.home() / ".config" / "superpowers" / "conversation-archive"
+    return archive if archive.is_dir() else None

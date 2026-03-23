@@ -125,7 +125,7 @@ def _merge_projects(native: list[dict], archive: list[dict]) -> list[dict]:
     return sorted(by_slug.values(), key=lambda p: p["slug"])
 
 
-def run_preprocess(source_dir: Path, output_dir: Path, archive_dir: Path = None) -> None:
+def run_preprocess(source_dir: Path, output_dir: Path, archive_dir: Path | None = None) -> None:
     """Run the full preprocessing pipeline."""
     source_dir = Path(source_dir)
     output_dir = Path(output_dir)
