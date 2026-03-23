@@ -58,7 +58,8 @@ class NavTree(Tree):
             project_node = self.root.add(project["displayName"], data=project_data)
 
             for session in project.get("sessions", []):
-                start = session["startTime"][:16].replace("T", " ")
+                raw_start = session.get("startTime")
+                start = raw_start[:16].replace("T", " ") if raw_start else "—"
                 label = f"{start} ({session['agentCount']} agents)"
                 session_data = SessionNode(
                     session_id=session["id"],

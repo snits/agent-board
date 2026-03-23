@@ -3,7 +3,7 @@
 
 import json
 from pathlib import Path
-from tests.conftest import write_jsonl, write_json
+from conftest import write_jsonl, write_json
 
 
 def test_full_pipeline(tmp_path):
@@ -99,3 +99,58 @@ def test_full_pipeline(tmp_path):
     types = json.loads((output_dir / "agent-types.json").read_text())
     assert "strategist" in types
     assert "engine-arch" in types
+
+
+def test_pipeline_excludes_empty_sessions(tmp_path):
+    """Sessions with no messages should be excluded from index.json."""
+    from preprocessor.pipeline import run_preprocess
+
+    project_dir = tmp_path / "source" / "-Users-test-myproject"
+
+    # Session with messages
+    session_with = "aaaa1111-bbbb-cccc-dddd-eeeeeeeeeeee"
+    subagents_dir = project_dir / session_with / "subagents"
+    subagents_dir.mkdir(parents=True)
+    write_jsonl(project_dir / f"{session_with}.jsonl", [
+        {
+            "type": "assistant",
+            "teamName": "meeting",
+            "promptId": "prompt-111",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "hello"}]},
+            "uuid": "u1",
+            "parentUuid": None,
+            "timestamp": "2026-03-21T22:00:00Z",
+            "sessionId": session_with,
+        }
+    ])
+    write_json(subagents_dir / "agent-a1.meta.json", {"agentType": "general"})
+    write_jsonl(subagents_dir / "agent-a1.jsonl", [
+        {
+            "type": "user",
+            "promptId": "prompt-111",
+            "agentId": "a1",
+            "message": {"role": "user", "content": "Do stuff"},
+            "uuid": "a1-u1",
+            "parentUuid": None,
+            "isSidechain": True,
+            "timestamp": "2026-03-21T22:00:01Z",
+            "sessionId": session_with,
+        },
+    ])
+
+    # Empty session — no agent transcripts, no messages
+    session_empty = "ffff2222-gggg-hhhh-iiii-jjjjjjjjjjjj"
+    empty_subagents = project_dir / session_empty / "subagents"
+    empty_subagents.mkdir(parents=True)
+    write_jsonl(project_dir / f"{session_empty}.jsonl", [])
+
+    output_dir = tmp_path / "output"
+    run_preprocess(tmp_path / "source", output_dir)
+
+    index = json.loads((output_dir / "index.json").read_text())
+    sessions = index["projects"][0]["sessions"]
+    session_ids = [s["id"] for s in sessions]
+
+    # Empty session should be excluded from index
+    assert session_with in session_ids
+    assert session_empty not in session_ids
