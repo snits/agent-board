@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 
-from preprocessor.scanner import scan_projects
+from preprocessor.scanner import scan_projects, scan_archive
 from preprocessor.parser import parse_record
 from preprocessor.grouper import flatten_messages
 from preprocessor.writer import write_session, write_index, write_agent_types
@@ -51,9 +51,14 @@ def parse_agent_transcripts(subagents_dir: Path) -> list[dict]:
 
     Team lead broadcast messages appear in every agent's JSONL with the same UUID.
     We keep only the first occurrence of each UUID."""
+    return _parse_jsonl_files(sorted(Path(subagents_dir).glob("agent-*.jsonl")))
+
+
+def _parse_jsonl_files(jsonl_files: list[Path]) -> list[dict]:
+    """Parse a list of JSONL files into deduplicated parsed records."""
     all_records = []
     seen_uuids = set()
-    for jsonl_file in sorted(Path(subagents_dir).glob("agent-*.jsonl")):
+    for jsonl_file in jsonl_files:
         with open(jsonl_file) as f:
             for line in f:
                 line = line.strip()
@@ -76,8 +81,12 @@ def parse_agent_transcripts(subagents_dir: Path) -> list[dict]:
 
 def process_session(session: dict, team_names: dict, agent_meta: dict) -> dict:
     """Process a single session into a flat message list."""
-    subagents_dir = Path(session["subagentsDir"])
-    records = parse_agent_transcripts(subagents_dir)
+    if session.get("agentJsonls"):
+        records = _parse_jsonl_files([Path(p) for p in session["agentJsonls"]])
+    elif session.get("subagentsDir"):
+        records = parse_agent_transcripts(Path(session["subagentsDir"]))
+    else:
+        records = []
     messages = flatten_messages(records, team_names)
 
     timestamps = [m["timestamp"] for m in messages if m.get("timestamp")]
@@ -92,12 +101,38 @@ def process_session(session: dict, team_names: dict, agent_meta: dict) -> dict:
     }
 
 
-def run_preprocess(source_dir: Path, output_dir: Path) -> None:
+def _merge_projects(native: list[dict], archive: list[dict]) -> list[dict]:
+    """Merge native and archive project lists, combining sessions for shared slugs."""
+    by_slug = {}
+    for project in native:
+        by_slug[project["slug"]] = {
+            "slug": project["slug"],
+            "displayName": project["displayName"],
+            "sessions": list(project["sessions"]),
+        }
+    for project in archive:
+        if project["slug"] in by_slug:
+            existing_ids = {s["id"] for s in by_slug[project["slug"]]["sessions"]}
+            for session in project["sessions"]:
+                if session["id"] not in existing_ids:
+                    by_slug[project["slug"]]["sessions"].append(session)
+        else:
+            by_slug[project["slug"]] = {
+                "slug": project["slug"],
+                "displayName": project["displayName"],
+                "sessions": list(project["sessions"]),
+            }
+    return sorted(by_slug.values(), key=lambda p: p["slug"])
+
+
+def run_preprocess(source_dir: Path, output_dir: Path, archive_dir: Path = None) -> None:
     """Run the full preprocessing pipeline."""
     source_dir = Path(source_dir)
     output_dir = Path(output_dir)
 
-    projects = scan_projects(source_dir)
+    native_projects = scan_projects(source_dir)
+    archive_projects = scan_archive(archive_dir) if archive_dir else []
+    projects = _merge_projects(native_projects, archive_projects)
     all_agent_types = set()
     index_projects = []
 
@@ -105,7 +140,8 @@ def run_preprocess(source_dir: Path, output_dir: Path) -> None:
         index_sessions = []
         for session in project["sessions"]:
             team_names = parse_main_conversation(session.get("mainJsonl"))
-            agent_meta = parse_agent_meta(session["subagentsDir"])
+            subagents_dir = session.get("subagentsDir")
+            agent_meta = parse_agent_meta(subagents_dir) if subagents_dir else {}
             for meta in agent_meta.values():
                 all_agent_types.add(meta.get("agentType", "unknown"))
 

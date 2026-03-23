@@ -154,3 +154,135 @@ def test_pipeline_excludes_empty_sessions(tmp_path):
     # Empty session should be excluded from index
     assert session_with in session_ids
     assert session_empty not in session_ids
+
+
+def test_pipeline_processes_archive_sessions(tmp_path):
+    """Pipeline handles archive-style sessions with agentJsonls instead of subagentsDir."""
+    from preprocessor.pipeline import run_preprocess
+
+    # Create native source (empty — no projects)
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    # Create archive with a session
+    archive_dir = tmp_path / "archive"
+    project_dir = archive_dir / "-Users-test-myproject"
+    project_dir.mkdir(parents=True)
+
+    session_id = "aabbccdd-eeff-0011-2233-445566778899"
+
+    # Main conversation
+    write_jsonl(project_dir / f"{session_id}.jsonl", [
+        {
+            "type": "assistant",
+            "teamName": "design-meeting",
+            "promptId": "prompt-111",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "spawning"}]},
+            "uuid": "main-u1",
+            "parentUuid": None,
+            "timestamp": "2026-03-21T22:00:00Z",
+            "sessionId": session_id,
+        }
+    ])
+
+    # Agent files (flat, at project root — no subagents dir, no meta.json)
+    write_jsonl(project_dir / "agent-a1.jsonl", [
+        {
+            "type": "user",
+            "promptId": "prompt-111",
+            "agentId": "a1",
+            "message": {"role": "user", "content": '<teammate-message teammate_id="team-lead" summary="task">\nDo the analysis.\n</teammate-message>'},
+            "uuid": "a1-u1",
+            "parentUuid": None,
+            "isSidechain": True,
+            "timestamp": "2026-03-21T22:00:01Z",
+            "sessionId": session_id,
+        },
+        {
+            "type": "assistant",
+            "agentId": "a1",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "Here is my analysis."}]},
+            "uuid": "a1-u2",
+            "parentUuid": "a1-u1",
+            "isSidechain": True,
+            "timestamp": "2026-03-21T22:00:10Z",
+            "sessionId": session_id,
+        },
+    ])
+
+    output_dir = tmp_path / "output"
+    run_preprocess(source_dir, output_dir, archive_dir=archive_dir)
+
+    # Verify index includes archive session
+    index = json.loads((output_dir / "index.json").read_text())
+    assert len(index["projects"]) == 1
+    assert index["projects"][0]["sessions"][0]["id"] == session_id
+
+    # Verify messages were parsed
+    messages = json.loads(
+        (output_dir / "sessions" / session_id / "messages.json").read_text()
+    )
+    assert len(messages) == 2
+    assert messages[0]["teamName"] == "design-meeting"
+
+
+def test_pipeline_merges_native_and_archive(tmp_path):
+    """Pipeline merges sessions from both native and archive sources."""
+    from preprocessor.pipeline import run_preprocess
+
+    slug = "-Users-test-myproject"
+    native_sid = "11111111-aaaa-bbbb-cccc-dddddddddddd"
+    archive_sid = "22222222-aaaa-bbbb-cccc-dddddddddddd"
+
+    # Native source
+    source_dir = tmp_path / "source"
+    native_project = source_dir / slug
+    native_sub = native_project / native_sid / "subagents"
+    native_sub.mkdir(parents=True)
+    write_jsonl(native_project / f"{native_sid}.jsonl", [
+        {
+            "type": "assistant", "teamName": "m1", "promptId": "p1",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "native"}]},
+            "uuid": "nu1", "parentUuid": None,
+            "timestamp": "2026-03-21T22:00:00Z", "sessionId": native_sid,
+        }
+    ])
+    write_json(native_sub / "agent-a1.meta.json", {"agentType": "general"})
+    write_jsonl(native_sub / "agent-a1.jsonl", [
+        {
+            "type": "user", "promptId": "p1", "agentId": "a1",
+            "message": {"role": "user", "content": "native agent"},
+            "uuid": "na1", "parentUuid": None, "isSidechain": True,
+            "timestamp": "2026-03-21T22:00:01Z", "sessionId": native_sid,
+        },
+    ])
+
+    # Archive source
+    archive_dir = tmp_path / "archive"
+    archive_project = archive_dir / slug
+    archive_project.mkdir(parents=True)
+    write_jsonl(archive_project / f"{archive_sid}.jsonl", [
+        {
+            "type": "assistant", "teamName": "m2", "promptId": "p2",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "archive"}]},
+            "uuid": "au1", "parentUuid": None,
+            "timestamp": "2026-03-20T10:00:00Z", "sessionId": archive_sid,
+        }
+    ])
+    write_jsonl(archive_project / "agent-a2.jsonl", [
+        {
+            "type": "user", "promptId": "p2", "agentId": "a2",
+            "message": {"role": "user", "content": "archive agent"},
+            "uuid": "aa1", "parentUuid": None, "isSidechain": True,
+            "timestamp": "2026-03-20T10:00:01Z", "sessionId": archive_sid,
+        },
+    ])
+
+    output_dir = tmp_path / "output"
+    run_preprocess(source_dir, output_dir, archive_dir=archive_dir)
+
+    index = json.loads((output_dir / "index.json").read_text())
+    assert len(index["projects"]) == 1
+    session_ids = [s["id"] for s in index["projects"][0]["sessions"]]
+    assert native_sid in session_ids
+    assert archive_sid in session_ids
