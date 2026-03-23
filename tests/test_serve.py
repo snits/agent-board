@@ -59,7 +59,7 @@ def test_translate_path_blocks_traversal(tmp_path):
 
     result = handler.translate_path("/data/../../etc/passwd")
     resolved = Path(result).resolve()
-    assert str(resolved).startswith(str(data_dir.resolve())), (
+    assert resolved.is_relative_to(data_dir.resolve()), (
         f"Path traversal escaped data dir: {resolved}"
     )
 
@@ -74,6 +74,25 @@ def test_translate_path_blocks_encoded_traversal(tmp_path):
     # but our override receives the raw path. Test both forms.
     result = handler.translate_path("/data/../../../etc/passwd")
     resolved = Path(result).resolve()
-    assert str(resolved).startswith(str(data_dir.resolve())), (
+    assert resolved.is_relative_to(data_dir.resolve()), (
         f"Path traversal escaped data dir: {resolved}"
+    )
+
+
+def test_translate_path_blocks_sibling_prefix_collision(tmp_path):
+    """Sibling dir with matching prefix must not pass the containment check.
+
+    e.g., data_dir=/tmp/agent-board should block /tmp/agent-board-evil/secret
+    """
+    data_dir = tmp_path / "agent-board"
+    data_dir.mkdir()
+    sibling = tmp_path / "agent-board-evil"
+    sibling.mkdir()
+    (sibling / "secret").write_text("sensitive data")
+    handler = _make_handler(data_dir)
+
+    result = handler.translate_path("/data/../agent-board-evil/secret")
+    resolved = Path(result).resolve()
+    assert resolved.is_relative_to(data_dir.resolve()), (
+        f"Sibling prefix collision escaped data dir: {resolved}"
     )

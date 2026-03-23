@@ -34,7 +34,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if relative.startswith("/"):
                 relative = relative[1:]
             resolved = (self.data_dir / relative).resolve()
-            if not str(resolved).startswith(str(self.data_dir.resolve())):
+            if not resolved.is_relative_to(self.data_dir.resolve()):
                 return str(self.data_dir)
             return str(resolved)
         return super().translate_path(path)
