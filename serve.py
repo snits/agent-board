@@ -7,10 +7,14 @@ import socketserver
 from pathlib import Path
 
 from preprocess import run_preprocess
+from preprocessor.config import load_config
+from preprocessor.paths import default_data_dir, default_source_dir
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
-    """Serves files from the project root and redirects / to /frontend/."""
+    """Serves frontend from project root and /data/ from the XDG data directory."""
+
+    data_dir: Path = Path("data")
 
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=directory, **kwargs)
@@ -23,6 +27,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def translate_path(self, path):
+        """Route /data/ requests to the XDG data directory."""
+        if path.startswith("/data/") or path == "/data":
+            relative = path[len("/data"):]
+            if relative.startswith("/"):
+                relative = relative[1:]
+            resolved = (self.data_dir / relative).resolve()
+            if not resolved.is_relative_to(self.data_dir.resolve()):
+                return str(self.data_dir)
+            return str(resolved)
+        return super().translate_path(path)
+
     def log_request(self, code="-", size="-"):
         if isinstance(code, int) and code >= 400:
             super().log_request(code, size)
@@ -30,12 +46,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess and serve Agent Board")
-    parser.add_argument("--source", type=Path, default=Path.home() / ".claude" / "projects")
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--source", type=Path, default=None)
+    parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--skip-preprocess", action="store_true", help="Skip preprocessing, serve existing data")
-    parser.add_argument("--output", type=Path, default=Path("data"))
+    parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--tui", action="store_true", help="Launch terminal UI instead of web server")
     args = parser.parse_args()
+    config = load_config()
+    args.source = args.source if args.source is not None else config.get("source", default_source_dir())
+    args.port = args.port if args.port is not None else config.get("port", 8080)
+    args.output = args.output if args.output is not None else default_data_dir()
 
     if not args.skip_preprocess:
         if not args.source.exists():
@@ -48,11 +68,12 @@ def main():
 
     if args.tui:
         from tui.app import AgentBoardApp
-        AgentBoardApp(data_dir=args.output).run()
+        AgentBoardApp(data_dir=args.output, source_dir=args.source).run()
         return
 
     project_root = str(Path(__file__).parent)
     socketserver.TCPServer.allow_reuse_address = True
+    Handler.data_dir = args.output.resolve()
 
     with socketserver.TCPServer(("", args.port), lambda *a, **kw: Handler(*a, directory=project_root, **kw)) as httpd:
         print(f"Agent Board running at http://localhost:{args.port}/frontend/")

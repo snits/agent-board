@@ -14,7 +14,7 @@
 - **Backend:** Python preprocessor (scanner → parser → grouper → writer) with no dependencies beyond stdlib
 - **Frontend:** Vanilla HTML/CSS/JS, CDN dependencies (marked.js, DOMPurify)
 - **Serving:** Python stdlib HTTP server, serves from project root
-- **Data:** Preprocessed JSON files in `data/` (gitignored, regenerated)
+- **Data:** Preprocessed JSON files in `~/.local/share/agent-board/` (XDG-compliant, overridable via `$XDG_DATA_HOME` or `--output`)
 
 ## Conventions
 
