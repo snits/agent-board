@@ -68,7 +68,7 @@ def main():
 
     if args.tui:
         from tui.app import AgentBoardApp
-        AgentBoardApp(data_dir=args.output).run()
+        AgentBoardApp(data_dir=args.output, source_dir=args.source).run()
         return
 
     project_root = str(Path(__file__).parent)

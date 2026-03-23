@@ -9,7 +9,8 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Tree
 
-from preprocessor.paths import default_data_dir
+from preprocess import run_preprocess
+from preprocessor.paths import default_data_dir, default_source_dir
 from tui.data import load_index, load_agent_types, load_session, load_meeting
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.chat_view import ChatView
@@ -37,11 +38,18 @@ class AgentBoardApp(App):
         Binding("escape", "escape", "Back", show=False, priority=True),
         Binding("n", "next_meeting", "Next meeting"),
         Binding("p", "prev_meeting", "Prev meeting"),
+        Binding("R", "refresh", "Refresh"),
     ]
 
-    def __init__(self, data_dir: Path | str | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        data_dir: Path | str | None = None,
+        source_dir: Path | str | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self._data_dir = Path(data_dir) if data_dir is not None else default_data_dir()
+        self._source_dir = Path(source_dir) if source_dir is not None else default_source_dir()
         self._agent_types = {}
         self._current_meeting_node: MeetingNode | None = None
         self._meeting_list: list[MeetingNode] = []
@@ -105,6 +113,18 @@ class AgentBoardApp(App):
 
         # Update chat view
         self.query_one(ChatView).load_meeting(meeting_data, self._agent_types)
+
+    def action_refresh(self) -> None:
+        """Re-run the preprocessor and reload all data."""
+        run_preprocess(self._source_dir, self._data_dir)
+        index_data = load_index(self._data_dir)
+        self._agent_types = load_agent_types(self._data_dir)
+        self._current_meeting_node = None
+        self._search_query = ""
+        self._agent_filter.clear()
+        self.query_one(NavTree).reload(index_data)
+        self.query_one(AgentBar).clear()
+        self.query_one(ChatView).clear_meeting()
 
     def action_show_search(self) -> None:
         """Show the search bar."""

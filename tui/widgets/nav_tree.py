@@ -82,6 +82,11 @@ class NavTree(Tree):
                 )
                 project_node.add(label, data=session_data)
 
+    def reload(self, index_data: dict) -> None:
+        """Clear and rebuild the tree from fresh index data."""
+        self.clear()
+        self._populate_from_index(index_data)
+
     def load_session_meetings(self, node, session_data: dict) -> None:
         """Populate a session node with its meetings from loaded session data."""
         if not session_data:
