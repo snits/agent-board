@@ -72,14 +72,25 @@ def test_flatten_messages_sorted_by_timestamp():
 
 
 def test_flatten_messages_drops_orphans():
-    """Records with no resolvable promptId are excluded."""
+    """Records with no resolvable promptId get synthetic '__main__' promptId and 'Main Conversation' teamName."""
     records = [
         {"uuid": "u1", "promptId": None, "parentUuid": None, "timestamp": "2026-03-21T22:00:00Z", "agentId": "a1", "role": "user", "content": "Orphan", "toolUse": []},
         {"uuid": "u2", "promptId": "prompt-A", "parentUuid": None, "timestamp": "2026-03-21T22:00:01Z", "agentId": "a1", "role": "user", "content": "Has prompt", "toolUse": []},
     ]
     result = flatten_messages(records, {})
+    assert len(result) == 2
+    orphan = next(r for r in result if r["content"] == "Orphan")
+    assert orphan["teamName"] == "Main Conversation"
+
+
+def test_flatten_messages_orphans_get_synthetic_prompt_id():
+    """Records with no resolvable promptId are assigned '__main__' as their promptId."""
+    records = [
+        {"uuid": "u1", "promptId": None, "parentUuid": None, "timestamp": "2026-03-21T22:00:00Z", "agentId": "a1", "role": "user", "content": "Orphan", "toolUse": []},
+    ]
+    result = flatten_messages(records, {})
     assert len(result) == 1
-    assert result[0]["content"] == "Has prompt"
+    assert result[0]["teamName"] == "Main Conversation"
 
 
 def test_flatten_messages_handles_none_timestamps():

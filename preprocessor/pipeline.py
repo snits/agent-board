@@ -82,11 +82,20 @@ def _parse_jsonl_files(jsonl_files: list[Path]) -> list[dict]:
 def process_session(session: dict, team_names: dict, agent_meta: dict) -> dict:
     """Process a single session into a flat message list."""
     if session.get("agentJsonls"):
-        records = _parse_jsonl_files([Path(p) for p in session["agentJsonls"]])
+        agent_records = _parse_jsonl_files([Path(p) for p in session["agentJsonls"]])
     elif session.get("subagentsDir"):
-        records = parse_agent_transcripts(Path(session["subagentsDir"]))
+        agent_records = parse_agent_transcripts(Path(session["subagentsDir"]))
     else:
-        records = []
+        agent_records = []
+
+    main_jsonl = session.get("mainJsonl")
+    if main_jsonl:
+        main_records = _parse_jsonl_files([Path(main_jsonl)])
+    else:
+        main_records = []
+
+    # Main records first so they get UUID dedup priority
+    records = main_records + agent_records
     messages = flatten_messages(records, team_names)
 
     timestamps = [m["timestamp"] for m in messages if m.get("timestamp")]

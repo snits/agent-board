@@ -35,8 +35,9 @@ def flatten_messages(
     for record in records:
         prompt_id = resolve_prompt_id(record, records_by_uuid)
         if not prompt_id:
-            continue
-        record["teamName"] = team_names.get(prompt_id, "Unnamed Meeting")
+            prompt_id = "__main__"
+        default_name = "Main Conversation" if prompt_id == "__main__" else "Unnamed Meeting"
+        record["teamName"] = team_names.get(prompt_id, default_name)
         result.append(record)
 
     result.sort(key=lambda m: m.get("timestamp") or "")
