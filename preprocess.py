@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 
+from preprocessor.config import load_config, apply_config
 from preprocessor.paths import default_data_dir
 from preprocessor.scanner import scan_projects
 from preprocessor.parser import parse_record
@@ -158,6 +159,7 @@ def main():
         default=default_data_dir(),
         help="Output directory (default: ~/.local/share/agent-board/)",
     )
+    apply_config(parser, load_config())
     args = parser.parse_args()
     run_preprocess(args.source, args.output)
 
