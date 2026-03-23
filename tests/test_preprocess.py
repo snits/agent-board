@@ -8,7 +8,7 @@ from tests.conftest import write_jsonl, write_json
 
 def test_full_pipeline(tmp_path):
     """End-to-end: source directory → preprocessed output."""
-    from preprocess import run_preprocess
+    from preprocessor.pipeline import run_preprocess
 
     # Create source structure
     project_dir = tmp_path / "source" / "-Users-test-myproject"
