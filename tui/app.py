@@ -1,9 +1,11 @@
 # ABOUTME: Main Textual application for the Agent Board TUI.
 # ABOUTME: Composes widgets, handles keybindings, and manages data loading.
 
+import contextlib
+import io
 from pathlib import Path
 
-from textual import on
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -38,7 +40,7 @@ class AgentBoardApp(App):
         Binding("escape", "escape", "Back", show=False, priority=True),
         Binding("n", "next_meeting", "Next meeting"),
         Binding("p", "prev_meeting", "Prev meeting"),
-        Binding("R", "refresh", "Refresh"),
+        Binding("r", "refresh_data", "Refresh data"),
     ]
 
     def __init__(
@@ -114,9 +116,20 @@ class AgentBoardApp(App):
         # Update chat view
         self.query_one(ChatView).load_meeting(meeting_data, self._agent_types)
 
-    def action_refresh(self) -> None:
+    def action_refresh_data(self) -> None:
         """Re-run the preprocessor and reload all data."""
-        run_preprocess(self._source_dir, self._data_dir)
+        self.notify("Refreshing data...")
+        self._run_refresh()
+
+    @work(thread=True)
+    def _run_refresh(self) -> None:
+        """Run preprocessor in a background thread to avoid blocking the UI."""
+        with contextlib.redirect_stdout(io.StringIO()):
+            run_preprocess(self._source_dir, self._data_dir)
+        self.call_from_thread(self._rebuild_after_refresh)
+
+    def _rebuild_after_refresh(self) -> None:
+        """Reload data from disk and rebuild the UI after preprocessing."""
         index_data = load_index(self._data_dir)
         self._agent_types = load_agent_types(self._data_dir)
         self._current_meeting_node = None
@@ -125,6 +138,7 @@ class AgentBoardApp(App):
         self.query_one(NavTree).reload(index_data)
         self.query_one(AgentBar).clear()
         self.query_one(ChatView).clear_meeting()
+        self.notify("Data refreshed")
 
     def action_show_search(self) -> None:
         """Show the search bar."""
