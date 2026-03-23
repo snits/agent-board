@@ -7,7 +7,6 @@ import socketserver
 from pathlib import Path
 
 from preprocess import run_preprocess
-from preprocessor.config import load_config, apply_config
 from preprocessor.paths import default_data_dir
 
 
@@ -51,13 +50,7 @@ def main():
     parser.add_argument("--skip-preprocess", action="store_true", help="Skip preprocessing, serve existing data")
     parser.add_argument("--output", type=Path, default=default_data_dir())
     parser.add_argument("--tui", action="store_true", help="Launch terminal UI instead of web server")
-    config = load_config()
-    apply_config(parser, config)
     args = parser.parse_args()
-
-    # "ui" config key maps to --tui flag: "tui" enables it, anything else keeps web
-    if not args.tui and config.get("ui") == "tui":
-        args.tui = True
 
     if not args.skip_preprocess:
         if not args.source.exists():
