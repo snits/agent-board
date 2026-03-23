@@ -24,6 +24,14 @@ def test_default_data_dir_falls_back_to_home():
     assert result == Path.home() / ".local" / "share" / "agent-board"
 
 
+def test_default_data_dir_empty_string_falls_back():
+    """Empty XDG_DATA_HOME falls back to default per XDG spec."""
+    from preprocessor.paths import default_data_dir
+    with patch.dict(os.environ, {"XDG_DATA_HOME": ""}, clear=False):
+        result = default_data_dir()
+    assert result == Path.home() / ".local" / "share" / "agent-board"
+
+
 def test_default_data_dir_returns_path_object():
     """Return type is always a Path."""
     from preprocessor.paths import default_data_dir
