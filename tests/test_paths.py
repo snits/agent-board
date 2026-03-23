@@ -73,12 +73,20 @@ def test_default_source_dir():
     assert isinstance(result, Path)
 
 
-def test_default_source_dir_is_not_hardcoded_in_preprocess():
-    """preprocess.py uses default_source_dir() not a hardcoded path."""
+def test_preprocess_default_source_uses_default_source_dir():
+    """preprocess.py resolves --source to default_source_dir() when omitted."""
     from preprocessor.paths import default_source_dir
+    from unittest.mock import patch as mock_patch
     import preprocess
-    # Verify the module imports default_source_dir for use in main()
-    assert hasattr(preprocess, "default_source_dir")
+    # Call main() with no args, intercepting run_preprocess to capture source_dir
+    captured = {}
+    def fake_run(source_dir, output_dir):
+        captured["source"] = source_dir
+    with mock_patch.object(preprocess, "run_preprocess", fake_run), \
+         mock_patch("sys.argv", ["preprocess"]), \
+         mock_patch.object(preprocess, "load_config", return_value={}):
+        preprocess.main()
+    assert captured["source"] == default_source_dir()
 
 
 def test_tui_app_default_uses_xdg():
