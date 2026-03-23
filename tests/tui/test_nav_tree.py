@@ -52,3 +52,41 @@ async def test_session_nodes_are_leaves(sample_index):
         session_node = tree.root.children[0].children[0]
         assert len(session_node.children) == 0
         assert session_node.allow_expand is False
+
+
+async def test_tree_handles_null_start_time():
+    """Sessions with null startTime should not crash the tree."""
+    index_data = {
+        "projects": [
+            {
+                "slug": "-test-project",
+                "displayName": "test/project",
+                "sessions": [
+                    {
+                        "id": "sess-null",
+                        "startTime": None,
+                        "endTime": None,
+                        "agentCount": 0,
+                    },
+                    {
+                        "id": "sess-ok",
+                        "startTime": "2026-03-20T10:00:00.000Z",
+                        "endTime": "2026-03-20T11:00:00.000Z",
+                        "agentCount": 2,
+                    },
+                ],
+            }
+        ]
+    }
+    app = NavTreeApp(index_data)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        project_node = tree.root.children[0]
+        # Both sessions should render without crashing
+        assert len(project_node.children) == 2
+        # Null-timestamp session should show a fallback label
+        null_session = project_node.children[0]
+        assert "—" in str(null_session.label) or "agents" in str(null_session.label)
+        # Normal session should still render correctly
+        ok_session = project_node.children[1]
+        assert "2026-03-20" in str(ok_session.label)

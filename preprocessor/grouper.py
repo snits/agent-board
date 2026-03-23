@@ -39,5 +39,5 @@ def flatten_messages(
         record["teamName"] = team_names.get(prompt_id, "Unnamed Meeting")
         result.append(record)
 
-    result.sort(key=lambda m: m.get("timestamp", ""))
+    result.sort(key=lambda m: m.get("timestamp") or "")
     return result

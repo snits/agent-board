@@ -80,3 +80,16 @@ def test_flatten_messages_drops_orphans():
     result = flatten_messages(records, {})
     assert len(result) == 1
     assert result[0]["content"] == "Has prompt"
+
+
+def test_flatten_messages_handles_none_timestamps():
+    """Records with timestamp=None should sort without crashing."""
+    records = [
+        {"uuid": "u1", "promptId": "prompt-A", "parentUuid": None, "timestamp": None, "agentId": "a1", "role": "user", "content": "No timestamp", "toolUse": []},
+        {"uuid": "u2", "promptId": "prompt-A", "parentUuid": None, "timestamp": "2026-03-21T22:00:00Z", "agentId": "a1", "role": "assistant", "content": "Has timestamp", "toolUse": []},
+    ]
+    result = flatten_messages(records, {})
+    assert len(result) == 2
+    # Record with None timestamp should sort before the timestamped one
+    assert result[0]["content"] == "No timestamp"
+    assert result[1]["content"] == "Has timestamp"
