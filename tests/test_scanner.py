@@ -3,7 +3,7 @@
 
 import json
 from pathlib import Path
-from tests.conftest import write_jsonl, write_json
+from conftest import write_jsonl, write_json
 from preprocessor.scanner import scan_projects, derive_display_name
 
 
