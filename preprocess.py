@@ -6,7 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-from preprocessor.paths import default_data_dir
+from preprocessor.config import load_config
+from preprocessor.paths import default_data_dir, default_source_dir
 from preprocessor.scanner import scan_projects
 from preprocessor.parser import parse_record
 from preprocessor.grouper import group_into_meetings
@@ -149,16 +150,19 @@ def main():
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path.home() / ".claude" / "projects",
+        default=None,
         help="Source directory to scan (default: ~/.claude/projects/)",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=default_data_dir(),
+        default=None,
         help="Output directory (default: ~/.local/share/agent-board/)",
     )
     args = parser.parse_args()
+    config = load_config()
+    args.source = args.source if args.source is not None else config.get("source", default_source_dir())
+    args.output = args.output if args.output is not None else default_data_dir()
     run_preprocess(args.source, args.output)
 
 

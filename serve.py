@@ -7,7 +7,8 @@ import socketserver
 from pathlib import Path
 
 from preprocess import run_preprocess
-from preprocessor.paths import default_data_dir
+from preprocessor.config import load_config
+from preprocessor.paths import default_data_dir, default_source_dir
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -45,12 +46,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="Preprocess and serve Agent Board")
-    parser.add_argument("--source", type=Path, default=Path.home() / ".claude" / "projects")
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--source", type=Path, default=None)
+    parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--skip-preprocess", action="store_true", help="Skip preprocessing, serve existing data")
-    parser.add_argument("--output", type=Path, default=default_data_dir())
+    parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--tui", action="store_true", help="Launch terminal UI instead of web server")
     args = parser.parse_args()
+    config = load_config()
+    args.source = args.source if args.source is not None else config.get("source", default_source_dir())
+    args.port = args.port if args.port is not None else config.get("port", 8080)
+    args.output = args.output if args.output is not None else default_data_dir()
 
     if not args.skip_preprocess:
         if not args.source.exists():

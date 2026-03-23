@@ -13,11 +13,12 @@ def main() -> None:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=default_data_dir(),
+        default=None,
         help="Path to preprocessed data directory (default: ~/.local/share/agent-board/)",
     )
     args = parser.parse_args()
-    AgentBoardApp(data_dir=args.data_dir).run()
+    data_dir = args.data_dir if args.data_dir is not None else default_data_dir()
+    AgentBoardApp(data_dir=data_dir).run()
 
 
 if __name__ == "__main__":

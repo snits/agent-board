@@ -1,5 +1,5 @@
-# ABOUTME: Tests for XDG-compliant data directory resolution.
-# ABOUTME: Validates default path, env var override, and CLI override behavior.
+# ABOUTME: Tests for XDG-compliant path resolution (data, config, source).
+# ABOUTME: Validates default paths, env var overrides, and fallback behavior.
 
 import os
 from pathlib import Path
@@ -39,19 +39,46 @@ def test_default_data_dir_returns_path_object():
     assert isinstance(result, Path)
 
 
-def test_preprocess_default_output_is_not_hardcoded():
-    """preprocess.py --output default matches default_data_dir(), not './data'."""
-    from preprocessor.paths import default_data_dir
-    expected = default_data_dir()
-    # Parse with no args to get the default
-    from preprocess import main
-    import argparse
-    # Build the parser the same way main() does and check its default
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=expected)
-    args = parser.parse_args([])
-    assert args.output == expected
-    assert args.output != Path("data"), "Default should not be relative './data'"
+def test_default_config_dir_uses_xdg_config_home():
+    """Config dir is $XDG_CONFIG_HOME/agent-board."""
+    from preprocessor.paths import default_config_dir
+    with patch.dict(os.environ, {"XDG_CONFIG_HOME": "/tmp/xdg-config-test"}, clear=False):
+        result = default_config_dir()
+    assert result == Path("/tmp/xdg-config-test/agent-board")
+
+
+def test_default_config_dir_falls_back_to_home():
+    """Without XDG_CONFIG_HOME, falls back to ~/.config/agent-board."""
+    from preprocessor.paths import default_config_dir
+    env = os.environ.copy()
+    env.pop("XDG_CONFIG_HOME", None)
+    with patch.dict(os.environ, env, clear=True):
+        result = default_config_dir()
+    assert result == Path.home() / ".config" / "agent-board"
+
+
+def test_default_config_dir_empty_string_falls_back():
+    """Empty XDG_CONFIG_HOME falls back to default per XDG spec."""
+    from preprocessor.paths import default_config_dir
+    with patch.dict(os.environ, {"XDG_CONFIG_HOME": ""}, clear=False):
+        result = default_config_dir()
+    assert result == Path.home() / ".config" / "agent-board"
+
+
+def test_default_source_dir():
+    """Source dir defaults to ~/.claude/projects."""
+    from preprocessor.paths import default_source_dir
+    result = default_source_dir()
+    assert result == Path.home() / ".claude" / "projects"
+    assert isinstance(result, Path)
+
+
+def test_default_source_dir_is_not_hardcoded_in_preprocess():
+    """preprocess.py uses default_source_dir() not a hardcoded path."""
+    from preprocessor.paths import default_source_dir
+    import preprocess
+    # Verify the module imports default_source_dir for use in main()
+    assert hasattr(preprocess, "default_source_dir")
 
 
 def test_tui_app_default_uses_xdg():
