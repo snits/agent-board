@@ -11,7 +11,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer
 
-from preprocessor.paths import default_data_dir, default_source_dir
+from preprocessor.paths import default_archive_dir, default_data_dir, default_source_dir
 from preprocessor.pipeline import run_preprocess
 from tui.data import load_index, load_agent_types, load_session, load_messages
 from tui.widgets.agent_bar import AgentBar
@@ -108,7 +108,7 @@ class AgentBoardApp(App):
     def _run_refresh(self) -> None:
         """Run preprocessor in a background thread to avoid blocking the UI."""
         with contextlib.redirect_stdout(io.StringIO()):
-            run_preprocess(self._source_dir, self._data_dir)
+            run_preprocess(self._source_dir, self._data_dir, archive_dir=default_archive_dir())
         self.call_from_thread(self._rebuild_after_refresh)
 
     def _rebuild_after_refresh(self) -> None:

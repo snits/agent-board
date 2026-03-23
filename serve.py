@@ -7,7 +7,7 @@ import socketserver
 from pathlib import Path
 
 from preprocessor.config import load_config
-from preprocessor.paths import default_data_dir, default_source_dir
+from preprocessor.paths import default_archive_dir, default_data_dir, default_source_dir
 from preprocessor.pipeline import run_preprocess
 
 
@@ -63,7 +63,7 @@ def main():
             print("Use --source to specify the Claude projects directory, or --skip-preprocess to serve existing data.")
             raise SystemExit(1)
         print("Preprocessing transcripts...")
-        run_preprocess(args.source, args.output)
+        run_preprocess(args.source, args.output, archive_dir=default_archive_dir())
         print()
 
     if args.tui:

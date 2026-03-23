@@ -85,6 +85,28 @@
   }
 
   // ── Sidebar rendering ─────────────────────────────────
+  const SESSION_CAP = 20;
+
+  function buildSessionEl(session) {
+    const sessionEl = createEl('div', 'tree-session');
+    sessionEl.dataset.sessionId = session.id;
+
+    const sLabelEl = createEl('div', 'tree-label');
+    const timeStr = formatDate(session.startTime);
+    const agentMeta = session.agentCount >= 2
+      ? `<span class="session-meta">${session.agentCount}a</span>`
+      : '';
+    sLabelEl.innerHTML = `<span class="chevron">&#x25B8;</span><span>${timeStr}</span>${agentMeta}`;
+    sessionEl.appendChild(sLabelEl);
+
+    sLabelEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSession(sessionEl, session.id);
+    });
+
+    return sessionEl;
+  }
+
   function renderSidebar() {
     projectTree.innerHTML = '';
     if (!state.index || !state.index.projects) return;
@@ -92,28 +114,43 @@
     state.index.projects.forEach((project) => {
       const projectEl = createEl('div', 'tree-project');
       const labelEl = createEl('div', 'tree-label');
-      labelEl.innerHTML = `<span class="chevron">▸</span><span>${esc(project.displayName)}</span>`;
+      const sessionCount = project.sessions ? project.sessions.length : 0;
+      const countBadge = sessionCount > 0
+        ? `<span class="project-count">(${sessionCount})</span>`
+        : '';
+      labelEl.innerHTML =
+        `<span class="chevron">&#x25B8;</span><span>${esc(project.displayName)}</span>${countBadge}`;
       projectEl.appendChild(labelEl);
 
       const childrenEl = createEl('div', 'tree-children');
 
-      project.sessions.forEach((session) => {
-        const sessionEl = createEl('div', 'tree-session');
-        sessionEl.dataset.sessionId = session.id;
-
-        const sLabelEl = createEl('div', 'tree-label');
-        const timeStr = formatDate(session.startTime);
-        sLabelEl.innerHTML = `<span class="chevron">▸</span><span>${timeStr}</span>` +
-          `<span class="session-meta">${session.agentCount}a</span>`;
-        sessionEl.appendChild(sLabelEl);
-
-        sLabelEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toggleSession(sessionEl, session.id);
-        });
-
-        childrenEl.appendChild(sessionEl);
+      // Sort sessions by startTime descending; null startTime sorts last
+      const sorted = (project.sessions || []).slice().sort((a, b) => {
+        if (!a.startTime && !b.startTime) return 0;
+        if (!a.startTime) return 1;
+        if (!b.startTime) return -1;
+        return b.startTime < a.startTime ? -1 : b.startTime > a.startTime ? 1 : 0;
       });
+
+      const visible = sorted.slice(0, SESSION_CAP);
+      const hidden = sorted.slice(SESSION_CAP);
+
+      visible.forEach((session) => {
+        childrenEl.appendChild(buildSessionEl(session));
+      });
+
+      if (hidden.length > 0) {
+        const showAllEl = createEl('div', 'tree-show-all');
+        showAllEl.textContent = `Show all ${sorted.length} sessions\u2026`;
+        showAllEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          hidden.forEach((session) => {
+            childrenEl.insertBefore(buildSessionEl(session), showAllEl);
+          });
+          showAllEl.remove();
+        });
+        childrenEl.appendChild(showAllEl);
+      }
 
       projectEl.appendChild(childrenEl);
 
@@ -197,8 +234,8 @@
         agentRoster.appendChild(el);
       });
 
-    // Auto-open roster when meeting loads
-    if (!state.rosterVisible) {
+    // Auto-open roster when meeting loads (only if there are agents to show)
+    if (!state.rosterVisible && agents.length > 0) {
       state.rosterVisible = true;
       rosterPanel.classList.remove('hidden');
       app.classList.add('roster-open');
