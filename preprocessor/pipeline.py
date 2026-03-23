@@ -112,6 +112,9 @@ def run_preprocess(source_dir: Path, output_dir: Path) -> None:
             session_data = process_session(session, team_names, agent_meta)
             write_session(output_dir, session_data)
 
+            if not session_data.get("startTime"):
+                continue
+
             unique_types = {m.get("agentType", "unknown") for m in agent_meta.values()}
             index_sessions.append({
                 "id": session["id"],
