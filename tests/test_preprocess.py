@@ -156,6 +156,68 @@ def test_pipeline_excludes_empty_sessions(tmp_path):
     assert session_empty not in session_ids
 
 
+def test_pipeline_excludes_automated_summary_sessions(tmp_path):
+    """Automated summarization sessions should be excluded from index."""
+    from preprocessor.pipeline import run_preprocess
+
+    project_dir = tmp_path / "source" / "-Users-test-myproject"
+    subagents_dir = project_dir / "aaaa1111-bbbb-cccc-dddd-eeeeeeeeeeee" / "subagents"
+    subagents_dir.mkdir(parents=True)
+
+    # Real session
+    real_sid = "aaaa1111-bbbb-cccc-dddd-eeeeeeeeeeee"
+    write_jsonl(project_dir / f"{real_sid}.jsonl", [
+        {
+            "type": "user",
+            "message": {"role": "user", "content": "Help me refactor this module"},
+            "uuid": "u1", "parentUuid": None,
+            "timestamp": "2026-03-21T22:00:00Z", "sessionId": real_sid,
+        },
+        {
+            "type": "assistant",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "Sure, let me look at the code."}]},
+            "uuid": "u2", "parentUuid": "u1",
+            "timestamp": "2026-03-21T22:00:05Z", "sessionId": real_sid,
+        },
+    ])
+    write_json(subagents_dir / "agent-a1.meta.json", {"agentType": "general"})
+    write_jsonl(subagents_dir / "agent-a1.jsonl", [
+        {
+            "type": "user", "promptId": "p1", "agentId": "a1",
+            "message": {"role": "user", "content": "Do work"},
+            "uuid": "a1-u1", "parentUuid": None, "isSidechain": True,
+            "timestamp": "2026-03-21T22:00:01Z", "sessionId": real_sid,
+        },
+    ])
+
+    # Automated summary session (should be filtered)
+    summary_sid = "bbbb2222-cccc-dddd-eeee-ffffffffffff"
+    summary_sub = project_dir / summary_sid / "subagents"
+    summary_sub.mkdir(parents=True)
+    write_jsonl(project_dir / f"{summary_sid}.jsonl", [
+        {
+            "type": "user",
+            "message": {"role": "user", "content": "Please write a concise, factual summary of this conversation."},
+            "uuid": "s1", "parentUuid": None,
+            "timestamp": "2025-11-03T20:00:00Z", "sessionId": summary_sid,
+        },
+        {
+            "type": "assistant",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "<summary>Built a thing</summary>"}]},
+            "uuid": "s2", "parentUuid": "s1",
+            "timestamp": "2025-11-03T20:00:01Z", "sessionId": summary_sid,
+        },
+    ])
+
+    output_dir = tmp_path / "output"
+    run_preprocess(tmp_path / "source", output_dir)
+
+    index = json.loads((output_dir / "index.json").read_text())
+    session_ids = [s["id"] for s in index["projects"][0]["sessions"]]
+    assert real_sid in session_ids
+    assert summary_sid not in session_ids
+
+
 def test_pipeline_processes_archive_sessions(tmp_path):
     """Pipeline handles archive-style sessions with agentJsonls instead of subagentsDir."""
     from preprocessor.pipeline import run_preprocess
