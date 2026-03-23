@@ -100,6 +100,15 @@ class ChatView(VerticalScroll):
         self._search_query = ""
         self._agent_filter: set[str] = set()
 
+    def clear_meeting(self) -> None:
+        """Clear the current meeting and show the empty state."""
+        self._meeting_data = None
+        self._agent_types = {}
+        self._search_query = ""
+        self._agent_filter = set()
+        self.message_count = 0
+        self._show_empty_state(self.EMPTY_STATE_HINT)
+
     def load_meeting(self, meeting_data: dict, agent_types: dict) -> None:
         """Load and render a meeting's messages."""
         self._meeting_data = meeting_data
