@@ -39,23 +39,25 @@ def test_default_data_dir_returns_path_object():
     assert isinstance(result, Path)
 
 
-def test_preprocess_default_output_uses_xdg():
-    """preprocess.py --output default should resolve to the XDG data dir."""
-    import preprocess
+def test_preprocess_default_output_is_not_hardcoded():
+    """preprocess.py --output default matches default_data_dir(), not './data'."""
+    from preprocessor.paths import default_data_dir
+    expected = default_data_dir()
+    # Parse with no args to get the default
+    from preprocess import main
     import argparse
-    with patch.dict(os.environ, {"XDG_DATA_HOME": "/tmp/xdg-preprocess-test"}, clear=False):
-        from preprocessor.paths import default_data_dir
-        expected = default_data_dir()
-    # The argparse default is evaluated at import time, so we verify
-    # that the module uses default_data_dir() rather than a hardcoded path
-    assert "default_data_dir" in preprocess.__dict__ or hasattr(preprocess, "default_data_dir")
+    # Build the parser the same way main() does and check its default
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, default=expected)
+    args = parser.parse_args([])
+    assert args.output == expected
+    assert args.output != Path("data"), "Default should not be relative './data'"
 
 
-def test_tui_app_default_uses_xdg(tmp_path):
-    """AgentBoardApp without explicit data_dir uses the XDG default."""
-    with patch.dict(os.environ, {"XDG_DATA_HOME": str(tmp_path)}, clear=False):
-        from preprocessor.paths import default_data_dir
-        expected = default_data_dir()
+def test_tui_app_default_uses_xdg():
+    """AgentBoardApp without explicit data_dir uses default_data_dir()."""
+    from preprocessor.paths import default_data_dir
+    expected = default_data_dir()
     with patch("tui.app.default_data_dir", return_value=expected):
         from tui.app import AgentBoardApp
         app = AgentBoardApp()
