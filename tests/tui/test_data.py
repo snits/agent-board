@@ -1,7 +1,7 @@
 # ABOUTME: Tests for the TUI data loading layer.
 # ABOUTME: Verifies JSON file reading from the preprocessor output directory.
 
-from tui.data import load_index, load_agent_types, load_session, load_meeting
+from tui.data import load_index, load_agent_types, load_session, load_messages
 
 
 def test_load_index(data_dir, sample_index):
@@ -19,13 +19,14 @@ def test_load_agent_types(data_dir, sample_agent_types):
 def test_load_session(data_dir, sample_session):
     result = load_session(data_dir, "sess-001")
     assert result == sample_session
-    assert len(result["meetings"]) == 2
+    assert "agents" in result
+    assert len(result["agents"]) == 2
 
 
-def test_load_meeting(data_dir, sample_meeting):
-    result = load_meeting(data_dir, "sess-001", "mtg-001")
-    assert result == sample_meeting
-    assert len(result["messages"]) == 5
+def test_load_messages(data_dir, sample_messages):
+    result = load_messages(data_dir, "sess-001")
+    assert result == sample_messages
+    assert len(result) == 5
 
 
 def test_load_index_missing_file(tmp_path):
@@ -43,6 +44,6 @@ def test_load_session_missing_file(tmp_path):
     assert result is None
 
 
-def test_load_meeting_missing_file(tmp_path):
-    result = load_meeting(tmp_path, "sess-001", "nonexistent")
+def test_load_messages_missing_file(tmp_path):
+    result = load_messages(tmp_path, "nonexistent")
     assert result is None

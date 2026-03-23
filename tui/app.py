@@ -9,14 +9,14 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Footer, Tree
+from textual.widgets import Footer
 
 from preprocessor.paths import default_data_dir, default_source_dir
 from preprocessor.pipeline import run_preprocess
-from tui.data import load_index, load_agent_types, load_session, load_meeting
+from tui.data import load_index, load_agent_types, load_session, load_messages
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.chat_view import ChatView
-from tui.widgets.nav_tree import NavTree, SessionNode, MeetingNode
+from tui.widgets.nav_tree import NavTree, SessionNode
 from tui.widgets.search_bar import SearchBar
 
 
@@ -38,8 +38,6 @@ class AgentBoardApp(App):
         Binding("t", "toggle_tools", "Toggle tools"),
         Binding("tab", "switch_focus", "Switch panel", show=False),
         Binding("escape", "escape", "Back", show=False, priority=True),
-        Binding("n", "next_meeting", "Next meeting"),
-        Binding("p", "prev_meeting", "Prev meeting"),
         Binding("r", "refresh_data", "Refresh data"),
     ]
 
@@ -53,8 +51,7 @@ class AgentBoardApp(App):
         self._data_dir = Path(data_dir) if data_dir is not None else default_data_dir()
         self._source_dir = Path(source_dir) if source_dir is not None else default_source_dir()
         self._agent_types = {}
-        self._current_meeting_node: MeetingNode | None = None
-        self._meeting_list: list[MeetingNode] = []
+        self._current_session_node: SessionNode | None = None
         self._search_query = ""
         self._agent_filter: set[str] = set()
 
@@ -73,48 +70,34 @@ class AgentBoardApp(App):
         """Set initial focus to the nav tree."""
         self.query_one("#nav-tree", NavTree).focus()
 
-    @on(Tree.NodeExpanded)
-    def on_tree_expand(self, event: Tree.NodeExpanded) -> None:
-        """Lazy-load session meetings when a session node is expanded."""
-        node_data = event.node.data
-        if isinstance(node_data, SessionNode) and not node_data.loaded:
-            session = load_session(self._data_dir, node_data.session_id)
-            if session:
-                tree = self.query_one(NavTree)
-                tree.load_session_meetings(event.node, session)
+    @on(NavTree.SessionSelected)
+    def on_session_selected(self, event: NavTree.SessionSelected) -> None:
+        """Load and display the selected session's messages."""
+        self._load_session_data(event.session_node)
 
-    @on(NavTree.MeetingSelected)
-    def on_meeting_selected(self, event: NavTree.MeetingSelected) -> None:
-        """Load and display the selected meeting."""
-        meeting_node = event.meeting_node
-        self._load_meeting(meeting_node)
-
-    def _load_meeting(self, meeting_node: MeetingNode) -> None:
-        """Load meeting data and update all widgets."""
-        self._current_meeting_node = meeting_node
-        meeting_data = load_meeting(
-            self._data_dir, meeting_node.session_id, meeting_node.meeting_id
-        )
-        if not meeting_data:
+    def _load_session_data(self, session_node: SessionNode) -> None:
+        """Load session data and update all widgets."""
+        self._current_session_node = session_node
+        session_data = load_session(self._data_dir, session_node.session_id)
+        messages = load_messages(self._data_dir, session_node.session_id)
+        if not session_data or messages is None:
             return
 
-        # Update agent bar
-        session_label = meeting_node.session_start_time[:16].replace("T", " ")
+        # 2-part breadcrumb
+        session_label = session_node.start_time[:16].replace("T", " ")
         if not session_label:
-            session_label = meeting_node.session_id[:8]
-        breadcrumb = [
-            meeting_node.project_display_name,
-            session_label,
-            meeting_node.team_name,
-        ]
+            session_label = session_node.session_id[:8]
+        breadcrumb = [session_node.project_display_name, session_label]
+
         self.query_one(AgentBar).update_meeting(
-            meeting_data.get("agents", []),
+            session_data.get("agents", []),
             self._agent_types,
             breadcrumb,
         )
-
-        # Update chat view
-        self.query_one(ChatView).load_meeting(meeting_data, self._agent_types)
+        self.query_one(ChatView).load_messages(
+            {"messages": messages, "agents": session_data.get("agents", [])},
+            self._agent_types,
+        )
 
     def action_refresh_data(self) -> None:
         """Re-run the preprocessor and reload all data."""
@@ -132,7 +115,7 @@ class AgentBoardApp(App):
         """Reload data from disk and rebuild the UI after preprocessing."""
         index_data = load_index(self._data_dir)
         self._agent_types = load_agent_types(self._data_dir)
-        self._current_meeting_node = None
+        self._current_session_node = None
         self._search_query = ""
         self._agent_filter.clear()
         self.query_one(NavTree).reload(index_data)
@@ -190,57 +173,6 @@ class AgentBoardApp(App):
             else:
                 self._agent_filter = {type_list[next_idx]}
         self._apply_filters()
-
-    def action_next_meeting(self) -> None:
-        """Navigate to the next meeting in the current session."""
-        self._navigate_meeting(1)
-
-    def action_prev_meeting(self) -> None:
-        """Navigate to the previous meeting in the current session."""
-        self._navigate_meeting(-1)
-
-    def _navigate_meeting(self, direction: int) -> None:
-        """Navigate meetings by offset within the nav tree."""
-        if not self._current_meeting_node:
-            return
-        tree = self.query_one(NavTree)
-        # Find all meeting nodes in the tree
-        meetings = []
-        for project_node in tree.root.children:
-            for session_node in project_node.children:
-                for meeting_leaf in session_node.children:
-                    if isinstance(meeting_leaf.data, MeetingNode):
-                        meetings.append(meeting_leaf.data)
-        if not meetings:
-            return
-        # Find current index
-        current_idx = None
-        for i, m in enumerate(meetings):
-            if m.meeting_id == self._current_meeting_node.meeting_id:
-                current_idx = i
-                break
-        if current_idx is None:
-            return
-        new_idx = current_idx + direction
-        if 0 <= new_idx < len(meetings):
-            new_meeting = meetings[new_idx]
-            self._load_meeting(new_meeting)
-            # Sync tree cursor to match the navigated meeting
-            self._select_tree_node_for_meeting(tree, new_meeting.meeting_id)
-
-    def _select_tree_node_for_meeting(
-        self, tree: NavTree, meeting_id: str
-    ) -> None:
-        """Find and select the tree node matching a meeting ID."""
-        for project_node in tree.root.children:
-            for session_node in project_node.children:
-                for meeting_leaf in session_node.children:
-                    if (
-                        isinstance(meeting_leaf.data, MeetingNode)
-                        and meeting_leaf.data.meeting_id == meeting_id
-                    ):
-                        tree.move_cursor(meeting_leaf)
-                        return
 
     @on(SearchBar.SearchChanged)
     def on_search_changed(self, event: SearchBar.SearchChanged) -> None:

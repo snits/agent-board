@@ -22,16 +22,16 @@ def load_agent_types(data_dir: Path) -> dict:
 
 
 def load_session(data_dir: Path, session_id: str) -> dict | None:
-    """Load session metadata including meeting summaries."""
+    """Load session metadata."""
     path = Path(data_dir) / "sessions" / session_id / "session.json"
     if not path.exists():
         return None
     return json.loads(path.read_text())
 
 
-def load_meeting(data_dir: Path, session_id: str, meeting_id: str) -> dict | None:
-    """Load a meeting's full message history."""
-    path = Path(data_dir) / "sessions" / session_id / "meetings" / f"{meeting_id}.json"
+def load_messages(data_dir: Path, session_id: str) -> list[dict] | None:
+    """Load a session's flat message list."""
+    path = Path(data_dir) / "sessions" / session_id / "messages.json"
     if not path.exists():
         return None
     return json.loads(path.read_text())
