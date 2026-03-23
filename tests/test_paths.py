@@ -80,7 +80,7 @@ def test_preprocess_default_source_uses_default_source_dir():
     import preprocess
     # Call main() with no args, intercepting run_preprocess to capture source_dir
     captured = {}
-    def fake_run(source_dir, output_dir):
+    def fake_run(source_dir, output_dir, **kwargs):
         captured["source"] = source_dir
     with mock_patch.object(preprocess, "run_preprocess", fake_run), \
          mock_patch("sys.argv", ["preprocess"]), \
