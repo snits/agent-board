@@ -88,7 +88,7 @@ class ChatView(VerticalScroll):
     }
     """
 
-    EMPTY_STATE_HINT = "Select a meeting from the tree"
+    EMPTY_STATE_HINT = "Select a session from the tree"
     EMPTY_FILTER_HINT = "No messages match current filters"
 
     def __init__(self, **kwargs) -> None:
@@ -109,8 +109,8 @@ class ChatView(VerticalScroll):
         self.message_count = 0
         self._show_empty_state(self.EMPTY_STATE_HINT)
 
-    def load_meeting(self, meeting_data: dict, agent_types: dict) -> None:
-        """Load and render a meeting's messages."""
+    def load_messages(self, meeting_data: dict, agent_types: dict) -> None:
+        """Load and render a session's messages."""
         self._meeting_data = meeting_data
         self._agent_types = agent_types
         self._search_query = ""

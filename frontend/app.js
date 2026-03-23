@@ -1,4 +1,4 @@
-// ABOUTME: Main application logic for Agent Board — loads meeting data, renders chat messages,
+// ABOUTME: Main application logic for Agent Board — loads session data, renders chat messages,
 // ABOUTME: and manages sidebar navigation, agent roster filtering, and search.
 
 (function () {
@@ -11,7 +11,6 @@
     sessionCache: {},           // sessionId → session.json data
     currentMeeting: null,       // currently loaded meeting data
     currentSessionId: null,
-    currentMeetingId: null,
     agentFilter: null,          // agentId to filter by, or null
     searchQuery: '',            // current search text
     rosterVisible: false,
@@ -105,11 +104,8 @@
         const sLabelEl = createEl('div', 'tree-label');
         const timeStr = formatDate(session.startTime);
         sLabelEl.innerHTML = `<span class="chevron">▸</span><span>${timeStr}</span>` +
-          `<span class="session-meta">${session.meetingCount}m · ${session.agentCount}a</span>`;
+          `<span class="session-meta">${session.agentCount}a</span>`;
         sessionEl.appendChild(sLabelEl);
-
-        const sMeetings = createEl('div', 'tree-children');
-        sessionEl.appendChild(sMeetings);
 
         sLabelEl.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -130,80 +126,29 @@
   }
 
   async function toggleSession(sessionEl, sessionId) {
-    if (sessionEl.classList.contains('expanded')) {
-      sessionEl.classList.remove('expanded');
-      return;
-    }
-
-    sessionEl.classList.add('expanded');
-
-    // Lazy-load session data
-    if (!state.sessionCache[sessionId]) {
-      const meetingsContainer = sessionEl.querySelector('.tree-children');
-      meetingsContainer.innerHTML = '<div class="tree-status">Loading…</div>';
-      try {
-        const data = await fetchJSON(`/data/sessions/${sessionId}/session.json`);
-        state.sessionCache[sessionId] = data;
-      } catch (err) {
-        meetingsContainer.innerHTML = '<div class="tree-status tree-error">Failed to load</div>';
-        return;
-      }
-    }
-
-    renderSessionMeetings(sessionEl, sessionId);
-  }
-
-  function renderSessionMeetings(sessionEl, sessionId) {
-    const session = state.sessionCache[sessionId];
-    const meetingsContainer = sessionEl.querySelector('.tree-children');
-    meetingsContainer.innerHTML = '';
-
-    session.meetings.forEach((meeting) => {
-      const meetingEl = createEl('div', 'tree-meeting');
-      meetingEl.dataset.meetingId = meeting.id;
-      meetingEl.dataset.sessionId = sessionId;
-
-      const mLabel = createEl('div', 'tree-label');
-      const name = meeting.teamName || 'Unnamed Meeting';
-      const truncName = name.length > 22 ? name.slice(0, 22) + '…' : name;
-      mLabel.innerHTML = `<span class="meeting-dot"></span><span>${esc(truncName)}</span>` +
-        `<span class="meeting-agents">${meeting.agentCount}a</span>`;
-      meetingEl.appendChild(mLabel);
-
-      mLabel.addEventListener('click', (e) => {
-        e.stopPropagation();
-        loadMeeting(sessionId, meeting.id, name);
-      });
-
-      meetingsContainer.appendChild(meetingEl);
-    });
-  }
-
-  // ── Meeting loading ────────────────────────────────────
-  async function loadMeeting(sessionId, meetingId, meetingName) {
-    // Update active state in sidebar
-    document.querySelectorAll('.tree-meeting.active').forEach((el) => el.classList.remove('active'));
-    const activeEl = [...document.querySelectorAll('.tree-meeting')].find(
-      (el) => el.dataset.meetingId === meetingId
-    );
-    if (activeEl) activeEl.classList.add('active');
+    // Highlight active session
+    document.querySelectorAll('.tree-session.active').forEach((el) => el.classList.remove('active'));
+    sessionEl.classList.add('active');
 
     state.currentSessionId = sessionId;
-    state.currentMeetingId = meetingId;
     state.agentFilter = null;
     state.searchQuery = '';
     searchInput.value = '';
 
-    chatHeader.textContent = meetingName || 'Meeting';
     showLoading();
 
     try {
-      const data = await fetchJSON(`/data/sessions/${sessionId}/meetings/${meetingId}.json`);
-      state.currentMeeting = data;
-      renderRoster(data.agents);
-      renderMessages(data);
+      const [sessionData, messages] = await Promise.all([
+        fetchJSON(`/data/sessions/${sessionId}/session.json`),
+        fetchJSON(`/data/sessions/${sessionId}/messages.json`),
+      ]);
+      state.sessionCache[sessionId] = sessionData;
+      state.currentMeeting = { messages, agents: sessionData.agents || [] };
+      chatHeader.textContent = formatDate(sessionData.startTime) || 'Session';
+      renderRoster(sessionData.agents || []);
+      renderMessages(state.currentMeeting);
     } catch (err) {
-      showError('Failed to load meeting: ' + err.message);
+      showError('Failed to load session: ' + err.message);
     }
   }
 
@@ -265,7 +210,7 @@
     chatMessages.innerHTML = '';
 
     if (!meeting.messages || meeting.messages.length === 0) {
-      chatMessages.innerHTML = '<div class="empty-state"><div class="empty-icon">∅</div><div class="empty-text">No messages in this meeting.</div></div>';
+      chatMessages.innerHTML = '<div class="empty-state"><div class="empty-icon">∅</div><div class="empty-text">No messages in this session.</div></div>';
       hideProgress();
       return;
     }
@@ -432,7 +377,7 @@
 
   // ── UI state helpers ───────────────────────────────────
   function showLoading() {
-    chatMessages.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>Loading meeting…</div></div>';
+    chatMessages.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>Loading session…</div></div>';
   }
 
   function showError(msg) {

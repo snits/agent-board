@@ -1,8 +1,9 @@
-# ABOUTME: Writes processed meeting data to the output JSON file structure.
-# ABOUTME: Generates index.json, agent-types.json, and per-meeting JSON files.
+# ABOUTME: Writes processed session data to the output JSON file structure.
+# ABOUTME: Generates index.json, agent-types.json, and per-session messages/metadata.
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 KNOWN_COLORS = {
@@ -55,70 +56,47 @@ def generate_agent_types(type_names: set[str]) -> dict:
 
 
 def write_session(output_dir: Path, session_info: dict) -> None:
-    """Write a session's meetings to the output directory."""
+    """Write a session's messages to the output directory."""
     output_dir = Path(output_dir)
     session_dir = output_dir / "sessions" / session_info["id"]
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean up stale meetings/ directory from previous format
     meetings_dir = session_dir / "meetings"
-    meetings_dir.mkdir(parents=True, exist_ok=True)
+    if meetings_dir.exists():
+        shutil.rmtree(meetings_dir)
 
     agent_meta = session_info.get("agentMeta", {})
+    messages = session_info.get("messages", [])
 
-    for prompt_id, meeting in session_info["meetings"].items():
-        agents_in_meeting = {}
-        for msg in meeting["messages"]:
-            aid = msg.get("agentId")
-            if aid and aid in agent_meta:
-                msg["agentType"] = agent_meta[aid].get("agentType", "unknown")
-                agents_in_meeting.setdefault(aid, {
-                    "agentId": aid,
-                    "type": msg["agentType"],
-                    "messageCount": 0,
-                })
-                agents_in_meeting[aid]["messageCount"] += 1
+    # Attach agentType to each message and compute agents roster
+    agents_roster: dict[str, dict] = {}
+    for msg in messages:
+        aid = msg.get("agentId")
+        if aid and aid in agent_meta:
+            msg["agentType"] = agent_meta[aid].get("agentType", "unknown")
+            agents_roster.setdefault(aid, {
+                "agentId": aid,
+                "type": msg["agentType"],
+                "messageCount": 0,
+            })
+            agents_roster[aid]["messageCount"] += 1
 
-        meeting_data = {
-            "id": prompt_id,
-            "teamName": meeting["teamName"],
-            "startTime": meeting.get("startTime"),
-            "endTime": meeting.get("endTime"),
-            "agents": list(agents_in_meeting.values()),
-            "messages": meeting["messages"],
-        }
+    # Write messages.json
+    (session_dir / "messages.json").write_text(json.dumps(messages, indent=2))
 
-        meeting_file = meetings_dir / f"{prompt_id}.json"
-        meeting_file.write_text(json.dumps(meeting_data, indent=2))
+    # Compute time range
+    timestamps = [m["timestamp"] for m in messages if m.get("timestamp")]
+    timestamps.sort()
 
-    all_timestamps = []
-    for meeting in session_info["meetings"].values():
-        if meeting.get("startTime"):
-            all_timestamps.append(meeting["startTime"])
-        if meeting.get("endTime"):
-            all_timestamps.append(meeting["endTime"])
-    all_timestamps.sort()
-
-    meeting_summaries = []
-    for prompt_id, meeting in session_info["meetings"].items():
-        meeting_agent_types = set()
-        for msg in meeting["messages"]:
-            agent_type = msg.get("agentType")
-            if agent_type:
-                meeting_agent_types.add(agent_type)
-        meeting_summaries.append({
-            "id": prompt_id,
-            "teamName": meeting["teamName"],
-            "startTime": meeting.get("startTime"),
-            "endTime": meeting.get("endTime"),
-            "agentCount": len(meeting_agent_types),
-            "messageCount": len(meeting["messages"]),
-        })
-
+    # Write session.json
     session_meta = {
         "id": session_info["id"],
-        "startTime": all_timestamps[0] if all_timestamps else None,
-        "endTime": all_timestamps[-1] if all_timestamps else None,
-        "meetingCount": len(session_info["meetings"]),
+        "startTime": timestamps[0] if timestamps else None,
+        "endTime": timestamps[-1] if timestamps else None,
+        "messageCount": len(messages),
         "agentCount": len({m.get("agentType", "unknown") for m in agent_meta.values()}),
-        "meetings": meeting_summaries,
+        "agents": list(agents_roster.values()),
     }
     (session_dir / "session.json").write_text(json.dumps(session_meta, indent=2))
 

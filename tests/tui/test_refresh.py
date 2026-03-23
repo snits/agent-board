@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tui.app import AgentBoardApp
-from tui.widgets.nav_tree import NavTree
+from tui.widgets.nav_tree import NavTree, SessionNode
 from tui.widgets.chat_view import ChatView
 from tui.widgets.agent_bar import AgentBar
 
@@ -47,24 +47,22 @@ async def test_nav_tree_reload_rebuilds_tree(data_dir, sample_index):
         assert len(tree.root.children) == 1
 
 
-async def test_nav_tree_reload_resets_loaded_state(data_dir, sample_index):
-    """After reload, session nodes are not marked as loaded."""
+async def test_nav_tree_reload_creates_fresh_nodes(data_dir, sample_index):
+    """After reload, session nodes are fresh instances."""
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test() as pilot:
         tree = app.query_one(NavTree)
 
-        # Expand a session to mark it loaded
-        project_node = tree.root.children[0]
-        session_node = project_node.children[0]
-        session_node.expand()
-        await pilot.pause()
-        assert session_node.data.loaded is True
+        # Get reference to old session node
+        old_session = tree.root.children[0].children[0]
+        old_data = old_session.data
 
-        # Reload and verify fresh session nodes are not loaded
+        # Reload and verify new session nodes are distinct objects
         tree.reload(sample_index)
         await pilot.pause()
         new_session = tree.root.children[0].children[0]
-        assert new_session.data.loaded is False
+        assert new_session.data is not old_data
+        assert isinstance(new_session.data, SessionNode)
 
 
 async def test_rebuild_after_refresh_reloads_data(data_dir):
@@ -85,26 +83,23 @@ async def test_rebuild_after_refresh_reloads_data(data_dir):
         assert "web-search-researcher" not in app._agent_types
 
 
-async def test_rebuild_after_refresh_clears_meeting(data_dir):
-    """_rebuild_after_refresh clears current meeting selection."""
+async def test_rebuild_after_refresh_clears_session(data_dir):
+    """_rebuild_after_refresh clears current session selection."""
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test() as pilot:
         tree = app.query_one(NavTree)
 
-        # Load a meeting
+        # Load a session
         project_node = tree.root.children[0]
         session_node = project_node.children[0]
-        session_node.expand()
+        tree.select_node(session_node)
         await pilot.pause()
-        meeting_leaf = session_node.children[0]
-        tree.select_node(meeting_leaf)
-        await pilot.pause()
-        assert app._current_meeting_node is not None
+        assert app._current_session_node is not None
 
         app._rebuild_after_refresh()
         await pilot.pause()
 
-        assert app._current_meeting_node is None
+        assert app._current_session_node is None
 
 
 async def test_rebuild_after_refresh_rebuilds_nav_tree(data_dir, sample_index):
