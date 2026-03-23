@@ -9,6 +9,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Footer, Tree
 
+from preprocessor.paths import default_data_dir
 from tui.data import load_index, load_agent_types, load_session, load_meeting
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.chat_view import ChatView
@@ -38,9 +39,9 @@ class AgentBoardApp(App):
         Binding("p", "prev_meeting", "Prev meeting"),
     ]
 
-    def __init__(self, data_dir: Path | str = "data", **kwargs) -> None:
+    def __init__(self, data_dir: Path | str | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._data_dir = Path(data_dir)
+        self._data_dir = Path(data_dir) if data_dir is not None else default_data_dir()
         self._agent_types = {}
         self._current_meeting_node: MeetingNode | None = None
         self._meeting_list: list[MeetingNode] = []

@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 
+from preprocessor.paths import default_data_dir
 from preprocessor.scanner import scan_projects
 from preprocessor.parser import parse_record
 from preprocessor.grouper import group_into_meetings
@@ -154,8 +155,8 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data"),
-        help="Output directory (default: ./data/)",
+        default=default_data_dir(),
+        help="Output directory (default: ~/.local/share/agent-board/)",
     )
     args = parser.parse_args()
     run_preprocess(args.source, args.output)
