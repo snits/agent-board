@@ -340,7 +340,7 @@ async def test_chat_view_refresh_pool_updates_content(sample_messages, sample_ag
 
 
 async def test_chat_view_scroll_down(sample_agent_types):
-    """Down arrow increments scroll offset when content exceeds viewport."""
+    """Down arrow moves cursor when content exceeds viewport."""
     # Enough messages so rows > pool height (24), enabling scrolling
     messages = []
     for i in range(50):
@@ -357,14 +357,14 @@ async def test_chat_view_scroll_down(sample_agent_types):
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        assert chat._scroll_offset == 0
+        assert chat._cursor_pos == 0
         await pilot.press("down")
         await pilot.pause()
-        assert chat._scroll_offset == 1
+        assert chat._cursor_pos == 1
 
 
 async def test_chat_view_scroll_clamps_at_top(sample_agent_types):
-    """Up arrow at top stays at offset 0."""
+    """Up arrow at top stays at cursor 0."""
     messages = []
     for i in range(50):
         messages.append({
@@ -380,14 +380,14 @@ async def test_chat_view_scroll_clamps_at_top(sample_agent_types):
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        assert chat._scroll_offset == 0
+        assert chat._cursor_pos == 0
         await pilot.press("up")
         await pilot.pause()
-        assert chat._scroll_offset == 0
+        assert chat._cursor_pos == 0
 
 
 async def test_chat_view_scroll_clamps_at_bottom(sample_agent_types):
-    """Scroll offset clamps so last row is visible."""
+    """End key moves cursor to last row."""
     messages = []
     for i in range(10):
         messages.append({
@@ -405,12 +405,11 @@ async def test_chat_view_scroll_clamps_at_bottom(sample_agent_types):
         await pilot.pause()
         await pilot.press("end")
         await pilot.pause()
-        max_offset = max(0, len(chat._rows) - len(chat._pool))
-        assert chat._scroll_offset == max_offset
+        assert chat._cursor_pos == len(chat._rows) - 1
 
 
 async def test_chat_view_page_down(sample_agent_types):
-    """Page down advances by pool size."""
+    """Page down advances cursor by pool size."""
     messages = []
     for i in range(100):
         messages.append({
@@ -430,7 +429,7 @@ async def test_chat_view_page_down(sample_agent_types):
         pool_size = len(chat._pool)
         await pilot.press("pagedown")
         await pilot.pause()
-        assert chat._scroll_offset == pool_size
+        assert chat._cursor_pos == pool_size
 
 
 async def test_chat_view_empty_state_via_pool():
@@ -460,7 +459,7 @@ async def test_chat_view_resize_rebuilds_pool():
 
 
 async def test_chat_view_filter_resets_scroll(sample_agent_types):
-    """Applying a filter resets scroll offset to 0."""
+    """Applying a filter resets cursor to 0."""
     messages = []
     for i in range(100):
         messages.append({
@@ -479,10 +478,10 @@ async def test_chat_view_filter_resets_scroll(sample_agent_types):
         await pilot.pause()
         await pilot.press("pagedown")
         await pilot.pause()
-        assert chat._scroll_offset > 0
+        assert chat._cursor_pos > 0
         chat.apply_filters(search_query="Message 5")
         await pilot.pause()
-        assert chat._scroll_offset == 0
+        assert chat._cursor_pos == 0
 
 
 def test_build_rows_includes_msg_index():
@@ -506,3 +505,134 @@ def test_build_rows_includes_msg_index():
     assert rows[2][2] == 0  # tool
     assert rows[3][2] == 1  # header
     assert rows[4][2] == 1  # content
+
+
+async def test_chat_view_cursor_starts_at_zero(sample_agent_types):
+    """Cursor starts at row 0 after loading messages."""
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        assert chat._cursor_pos == 0
+
+
+async def test_chat_view_cursor_moves_down(sample_agent_types):
+    """Down arrow moves cursor by one row."""
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        assert chat._cursor_pos == 1
+
+
+async def test_chat_view_cursor_clamps_at_top(sample_agent_types):
+    """Up at cursor 0 stays at 0."""
+    messages = [
+        {"uuid": "msg-0", "parentUuid": None, "agentId": "agent-aaa",
+         "role": "assistant", "content": "Hello", "toolUse": [],
+         "timestamp": "2026-03-20T10:00:00.000Z", "promptId": "mtg-001",
+         "agentType": "web-search-researcher", "teamName": "Test"},
+    ]
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        await pilot.press("up")
+        await pilot.pause()
+        assert chat._cursor_pos == 0
+
+
+async def test_chat_view_cursor_highlight_css(sample_agent_types):
+    """The pool widget at cursor position has the cursor CSS class."""
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        cursor_widgets = [w for w in chat._pool if w.has_class("cursor")]
+        assert len(cursor_widgets) == 1
+
+
+async def test_chat_view_cursor_scrolls_into_view(sample_agent_types):
+    """Cursor moving past pool bottom scrolls offset to follow."""
+    messages = []
+    for i in range(100):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001", "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        pool_size = len(chat._pool)
+        await pilot.press("end")
+        await pilot.pause()
+        assert chat._cursor_pos == len(chat._rows) - 1
+        assert chat._scroll_offset > 0
+        assert chat._scroll_offset <= chat._cursor_pos < chat._scroll_offset + pool_size
+
+
+async def test_chat_view_cursor_filter_resets(sample_agent_types):
+    """Applying a filter resets cursor to 0."""
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        for _ in range(5):
+            await pilot.press("down")
+        await pilot.pause()
+        assert chat._cursor_pos > 0
+        chat.apply_filters(search_query="Message 1")
+        await pilot.pause()
+        assert chat._cursor_pos == 0
