@@ -35,7 +35,7 @@ class AgentBoardApp(App):
         Binding("q", "quit", "Quit"),
         Binding("slash", "show_search", "Search", key_display="/", priority=True),
         Binding("f", "toggle_agent_filter", "Filter agents"),
-        Binding("t", "toggle_tools", "Toggle tools"),
+
         Binding("tab", "switch_focus", "Switch panel", show=False),
         Binding("escape", "escape", "Back", show=False, priority=True),
         Binding("r", "refresh_data", "Refresh data"),
@@ -141,10 +141,6 @@ class AgentBoardApp(App):
             self._apply_filters()
             return
         self.query_one("#nav-tree", NavTree).focus()
-
-    def action_toggle_tools(self) -> None:
-        """Toggle tool use detail level."""
-        self.query_one(ChatView).toggle_tool_detail()
 
     def action_switch_focus(self) -> None:
         """Toggle focus between nav tree and chat view."""
