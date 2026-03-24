@@ -114,6 +114,7 @@ class ChatView(Widget):
     DEFAULT_CSS = """
     ChatView {
         width: 3fr;
+        height: 3fr;
         min-width: 40;
         layout: vertical;
         overflow: hidden;
