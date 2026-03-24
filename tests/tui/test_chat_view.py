@@ -5,7 +5,8 @@ import pytest
 from textual.app import App, ComposeResult
 
 from tui.widgets.chat_view import (
-    ChatView, is_empty_message, format_tool_summary, matches_search, filter_by_agents,
+    ChatView, is_empty_message, format_tool_summary, matches_search,
+    filter_by_agents, _precompute_messages,
 )
 
 
@@ -124,6 +125,57 @@ async def test_chat_view_empty_state_on_launch():
         placeholders = chat.query(".empty-state")
         assert len(placeholders) == 1
         assert "Select a session" in str(placeholders.first().content)
+
+
+def test_precompute_sets_is_empty():
+    """Pre-computation annotates empty messages."""
+    msgs = [
+        {"content": "", "toolUse": []},
+        {"content": "hello", "toolUse": []},
+    ]
+    _precompute_messages(msgs)
+    assert msgs[0]["_is_empty"] is True
+    assert msgs[1]["_is_empty"] is False
+
+
+def test_precompute_sets_tool_summaries():
+    """Pre-computation caches formatted tool summaries."""
+    msgs = [
+        {
+            "content": "",
+            "toolUse": [
+                {"tool": "Read", "input": {"file_path": "/app.py"}, "summary": "Read → /app.py"},
+            ],
+        },
+    ]
+    _precompute_messages(msgs)
+    assert len(msgs[0]["_tool_summaries"]) == 1
+    assert "Read" in msgs[0]["_tool_summaries"][0]
+    assert len(msgs[0]["_tool_expanded_text"]) == 1
+
+
+def test_precompute_sets_search_text():
+    """Pre-computation builds a single lowercase search string."""
+    msgs = [
+        {
+            "content": "Hello World",
+            "toolUse": [
+                {"tool": "Read", "input": {}, "summary": "Read → app.py"},
+            ],
+        },
+    ]
+    _precompute_messages(msgs)
+    assert "hello world" in msgs[0]["_search_text"]
+    assert "read" in msgs[0]["_search_text"]
+    assert "app.py" in msgs[0]["_search_text"]
+
+
+def test_matches_search_uses_precomputed():
+    """matches_search works with pre-computed _search_text."""
+    msgs = [{"content": "Hello World", "toolUse": []}]
+    _precompute_messages(msgs)
+    assert matches_search(msgs[0], "hello") is True
+    assert matches_search(msgs[0], "nonexistent") is False
 
 
 async def test_chat_view_empty_state_on_filter(sample_messages, sample_agent_types):

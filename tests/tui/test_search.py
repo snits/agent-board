@@ -5,7 +5,7 @@ import pytest
 from textual.app import App, ComposeResult
 
 from tui.widgets.search_bar import SearchBar
-from tui.widgets.chat_view import matches_search, filter_by_agents
+from tui.widgets.chat_view import matches_search, filter_by_agents, _precompute_messages
 
 
 class SearchBarApp(App):
@@ -17,26 +17,31 @@ class SearchBarApp(App):
 
 def test_matches_search_in_content():
     msg = {"content": "Hello world", "toolUse": []}
+    _precompute_messages([msg])
     assert matches_search(msg, "hello") is True
 
 
 def test_matches_search_case_insensitive():
     msg = {"content": "Textual Framework", "toolUse": []}
+    _precompute_messages([msg])
     assert matches_search(msg, "textual") is True
 
 
 def test_matches_search_in_tool_summary():
     msg = {"content": "", "toolUse": [{"tool": "Read", "input": {}, "summary": "Read → app.py"}]}
+    _precompute_messages([msg])
     assert matches_search(msg, "app.py") is True
 
 
 def test_matches_search_no_match():
     msg = {"content": "Hello world", "toolUse": []}
+    _precompute_messages([msg])
     assert matches_search(msg, "nonexistent") is False
 
 
 def test_matches_search_empty_query():
     msg = {"content": "Hello world", "toolUse": []}
+    _precompute_messages([msg])
     assert matches_search(msg, "") is True
 
 

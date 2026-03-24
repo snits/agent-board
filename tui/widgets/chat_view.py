@@ -50,15 +50,7 @@ def matches_search(msg: dict, query: str) -> bool:
     """Check if a message matches a search query (case-insensitive)."""
     if not query:
         return True
-    query_lower = query.lower()
-    if query_lower in msg.get("content", "").lower():
-        return True
-    for tool in msg.get("toolUse", []):
-        if query_lower in tool.get("summary", "").lower():
-            return True
-        if query_lower in tool.get("tool", "").lower():
-            return True
-    return False
+    return query.lower() in msg.get("_search_text", msg.get("content", "").lower())
 
 
 def filter_by_agents(messages: list[dict], agent_types: set[str]) -> list[dict]:
@@ -66,6 +58,21 @@ def filter_by_agents(messages: list[dict], agent_types: set[str]) -> list[dict]:
     if not agent_types:
         return messages
     return [m for m in messages if m.get("agentType") in agent_types]
+
+
+def _precompute_messages(messages: list[dict]) -> None:
+    """Annotate messages with cached formatting for render and search."""
+    for msg in messages:
+        msg["_is_empty"] = not msg.get("content") and not msg.get("toolUse")
+        tools = msg.get("toolUse", [])
+        msg["_tool_summaries"] = [format_tool_summary(t) for t in tools]
+        msg["_tool_expanded_text"] = [_format_tool_expanded(t) for t in tools]
+        # Single search string: content + all tool names + all tool summaries
+        parts = [msg.get("content", "")]
+        for tool in tools:
+            parts.append(tool.get("tool", ""))
+            parts.append(tool.get("summary", ""))
+        msg["_search_text"] = "\n".join(parts).lower()
 
 
 class ChatView(VerticalScroll):
