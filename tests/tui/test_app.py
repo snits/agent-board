@@ -9,6 +9,7 @@ from tui.widgets.nav_tree import NavTree, SessionNode
 from tui.widgets.chat_view import ChatView
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.search_bar import SearchBar
+from tui.widgets.detail_pane import DetailPane
 
 
 async def test_app_composes_all_widgets(data_dir):
@@ -311,3 +312,95 @@ async def test_filter_cycle_shows_position(data_dir):
         await pilot.pause()
         markup = str(bar._markup)
         assert "[2/" in markup
+
+
+async def test_detail_pane_toggle(data_dir):
+    """Pressing 'v' toggles the detail pane."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test(size=(80, 40)) as pilot:
+        pane = app.query_one(DetailPane)
+        assert not pane.has_class("-visible")
+
+        # Load a session first
+        tree = app.query_one(NavTree)
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+
+        await pilot.press("v")
+        await pilot.pause()
+        assert pane.has_class("-visible")
+
+        await pilot.press("v")
+        await pilot.pause()
+        assert not pane.has_class("-visible")
+
+
+async def test_detail_pane_no_toggle_without_session(data_dir):
+    """v is a no-op when no session is loaded."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test(size=(80, 40)) as pilot:
+        pane = app.query_one(DetailPane)
+        await pilot.press("v")
+        await pilot.pause()
+        assert not pane.has_class("-visible")
+
+
+async def test_escape_closes_detail_pane(data_dir):
+    """Escape closes the detail pane before other actions."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test(size=(80, 40)) as pilot:
+        tree = app.query_one(NavTree)
+        pane = app.query_one(DetailPane)
+
+        # Load a session and open detail pane
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+        assert pane.has_class("-visible")
+
+        # Escape should close pane
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not pane.has_class("-visible")
+
+
+async def test_tab_cycles_with_detail_pane(data_dir):
+    """Tab cycles NavTree -> ChatView -> DetailPane when pane is visible."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test(size=(80, 40)) as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+        pane = app.query_one(DetailPane)
+
+        # Load session and open pane
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+
+        # Start at nav
+        tree.focus()
+        await pilot.pause()
+        assert tree.has_focus_within
+
+        # Tab to chat
+        await pilot.press("tab")
+        await pilot.pause()
+        assert chat.has_focus_within
+
+        # Tab to detail pane
+        await pilot.press("tab")
+        await pilot.pause()
+        assert pane.has_focus_within
+
+        # Tab back to nav
+        await pilot.press("tab")
+        await pilot.pause()
+        assert tree.has_focus_within

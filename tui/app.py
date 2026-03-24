@@ -8,7 +8,7 @@ from pathlib import Path
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer
 
 from preprocessor.paths import default_archive_dir, default_data_dir, default_source_dir
@@ -16,6 +16,7 @@ from preprocessor.pipeline import run_preprocess
 from tui.data import load_index, load_agent_types, load_session, load_messages
 from tui.widgets.agent_bar import AgentBar
 from tui.widgets.chat_view import ChatView
+from tui.widgets.detail_pane import DetailPane
 from tui.widgets.nav_tree import NavTree, SessionNode
 from tui.widgets.search_bar import SearchBar
 
@@ -29,6 +30,12 @@ class AgentBoardApp(App):
     Screen {
         layout: vertical;
     }
+    #chat-column {
+        width: 3fr;
+    }
+    #chat-column > ChatView {
+        width: 1fr;
+    }
     """
 
     BINDINGS = [
@@ -36,6 +43,7 @@ class AgentBoardApp(App):
         Binding("slash", "show_search", "Search", key_display="/", priority=True),
         Binding("f", "toggle_agent_filter", "Filter agents"),
 
+        Binding("v", "toggle_detail", "Detail"),
         Binding("tab", "switch_focus", "Switch panel", show=False),
         Binding("escape", "escape", "Back", show=False, priority=True),
         Binding("r", "refresh_data", "Refresh data"),
@@ -62,7 +70,9 @@ class AgentBoardApp(App):
         yield AgentBar()
         with Horizontal():
             yield NavTree(index_data, id="nav-tree")
-            yield ChatView(id="chat-view")
+            with Vertical(id="chat-column"):
+                yield ChatView(id="chat-view")
+                yield DetailPane(agent_types=self._agent_types, id="detail-pane")
         yield SearchBar(id="search-bar")
         yield Footer()
 
@@ -99,6 +109,22 @@ class AgentBoardApp(App):
             self._agent_types,
         )
 
+    def action_toggle_detail(self) -> None:
+        """Toggle the detail pane."""
+        chat = self.query_one(ChatView)
+        if not chat._meeting_data:
+            return
+        pane = self.query_one(DetailPane)
+        if pane.is_visible:
+            pane.hide()
+        else:
+            pane.show()
+
+    @on(ChatView.MessageFocused)
+    def on_message_focused(self, event: ChatView.MessageFocused) -> None:
+        """Route focused message to the detail pane."""
+        self.query_one(DetailPane).update_message(event.message)
+
     def action_refresh_data(self) -> None:
         """Re-run the preprocessor and reload all data."""
         self.notify("Refreshing data...")
@@ -121,6 +147,8 @@ class AgentBoardApp(App):
         self.query_one(NavTree).reload(index_data)
         self.query_one(AgentBar).clear()
         self.query_one(ChatView).clear_meeting()
+        self.query_one(DetailPane).hide()
+        self.query_one(DetailPane).update_message(None)
         self.notify("Data refreshed")
 
     def action_show_search(self) -> None:
@@ -128,7 +156,12 @@ class AgentBoardApp(App):
         self.query_one(SearchBar).show()
 
     def action_escape(self) -> None:
-        """Handle Escape — hide search, clear filters, or return focus."""
+        """Handle Escape — close pane, hide search, clear filters, or return focus."""
+        pane = self.query_one(DetailPane)
+        if pane.is_visible:
+            pane.hide()
+            self.query_one(ChatView).focus()
+            return
         search = self.query_one(SearchBar)
         if search.has_class("-visible"):
             search.clear()
@@ -143,11 +176,17 @@ class AgentBoardApp(App):
         self.query_one("#nav-tree", NavTree).focus()
 
     def action_switch_focus(self) -> None:
-        """Toggle focus between nav tree and chat view."""
+        """Cycle focus: NavTree -> ChatView -> DetailPane (if visible) -> NavTree."""
         nav = self.query_one("#nav-tree", NavTree)
         chat = self.query_one("#chat-view", ChatView)
+        pane = self.query_one("#detail-pane", DetailPane)
         if nav.has_focus_within:
             chat.focus()
+        elif chat.has_focus_within:
+            if pane.is_visible:
+                pane.focus()
+            else:
+                nav.focus()
         else:
             nav.focus()
 
