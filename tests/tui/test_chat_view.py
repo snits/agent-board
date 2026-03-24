@@ -75,18 +75,6 @@ async def test_chat_view_filters_empty_messages(sample_empty_messages, sample_ag
         assert chat.message_count == 1
 
 
-async def test_chat_view_toggle_tool_detail(sample_messages, sample_agent_types):
-    app = ChatViewApp()
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        assert chat._tool_expanded is False
-        chat.toggle_tool_detail()
-        await pilot.pause()
-        assert chat._tool_expanded is True
-
-
 async def test_chat_view_apply_search_filter(sample_messages, sample_agent_types):
     app = ChatViewApp()
     async with app.run_test() as pilot:
@@ -103,28 +91,25 @@ async def test_chat_view_apply_search_filter(sample_messages, sample_agent_types
 async def test_chat_view_user_messages_have_class(sample_messages, sample_agent_types):
     """User messages get the msg-user CSS class for visual distinction."""
     app = ChatViewApp()
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
-        user_msgs = chat.query(".msg-user")
-        assert len(user_msgs) > 0
-        # Verify assistant messages don't have the class
-        all_content = chat.query(".msg-content")
-        assistant_msgs = [w for w in all_content if not w.has_class("msg-user")]
-        assert len(assistant_msgs) > 0
+        user_widgets = [w for w in chat._pool if w.has_class("msg-user")]
+        assert len(user_widgets) > 0
+        non_user_content = [w for w in chat._pool
+                           if w.has_class("msg-content") and not w.has_class("msg-user")]
+        assert len(non_user_content) > 0
 
 
 async def test_chat_view_empty_state_on_launch():
     """Chat view shows placeholder when no session is loaded."""
     app = ChatViewApp()
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         await pilot.pause()
-        # Should have a placeholder widget
-        placeholders = chat.query(".empty-state")
-        assert len(placeholders) == 1
-        assert "Select a session" in str(placeholders.first().content)
+        pool_texts = [str(w.content) for w in chat._pool]
+        assert any("Select a session" in t for t in pool_texts)
 
 
 def test_precompute_sets_is_empty():
@@ -151,7 +136,6 @@ def test_precompute_sets_tool_summaries():
     _precompute_messages(msgs)
     assert len(msgs[0]["_tool_summaries"]) == 1
     assert "Read" in msgs[0]["_tool_summaries"][0]
-    assert len(msgs[0]["_tool_expanded_text"]) == 1
 
 
 def test_precompute_sets_search_text():
@@ -181,165 +165,16 @@ def test_matches_search_uses_precomputed():
 async def test_chat_view_empty_state_on_filter(sample_messages, sample_agent_types):
     """Chat view shows 'no results' when filters produce zero matches."""
     app = ChatViewApp()
-    async with app.run_test() as pilot:
+    async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
         assert chat.message_count > 0
-        # Apply a search that matches nothing
         chat.apply_filters(search_query="zzz_no_match_zzz")
         await pilot.pause()
         assert chat.message_count == 0
-        placeholders = chat.query(".empty-state")
-        assert len(placeholders) == 1
-        assert "No messages match" in str(placeholders.first().content)
-
-
-async def test_chat_view_paginates_large_sessions(sample_agent_types):
-    """Only PAGE_SIZE messages are mounted initially for large sessions."""
-    messages = []
-    for i in range(250):
-        messages.append({
-            "uuid": f"msg-{i:04d}",
-            "parentUuid": None,
-            "agentId": "agent-aaa",
-            "role": "assistant",
-            "content": f"Message number {i}",
-            "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001",
-            "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
-    app = ChatViewApp()
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        assert chat.message_count == 250
-        assert chat._rendered_count == chat.PAGE_SIZE
-
-
-async def test_chat_view_small_session_no_indicator(sample_messages, sample_agent_types):
-    """Sessions smaller than PAGE_SIZE don't show a load-more indicator."""
-    app = ChatViewApp()
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        indicators = chat.query(".load-more")
-        assert len(indicators) == 0
-
-
-async def test_chat_view_large_session_shows_indicator(sample_agent_types):
-    """Sessions larger than PAGE_SIZE show a load-more indicator."""
-    messages = []
-    for i in range(150):
-        messages.append({
-            "uuid": f"msg-{i:04d}",
-            "parentUuid": None,
-            "agentId": "agent-aaa",
-            "role": "assistant",
-            "content": f"Message number {i}",
-            "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001",
-            "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
-    app = ChatViewApp()
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        indicators = chat.query(".load-more")
-        assert len(indicators) == 1
-
-
-async def test_chat_view_loads_more_on_scroll(sample_agent_types):
-    """watch_scroll_y triggers next page when near bottom."""
-    messages = []
-    for i in range(250):
-        messages.append({
-            "uuid": f"msg-{i:04d}",
-            "parentUuid": None,
-            "agentId": "agent-aaa",
-            "role": "assistant",
-            "content": f"Message number {i}",
-            "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001",
-            "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        assert chat._rendered_count == chat.PAGE_SIZE
-        # Simulate scroll near bottom by calling the watcher directly.
-        # Headless Textual may not compute real scroll geometry, so we
-        # invoke the watcher with values that satisfy the threshold.
-        chat.watch_scroll_y(0.0, 999.0)
-        await pilot.pause()
-        assert chat._rendered_count == chat.PAGE_SIZE * 2
-
-
-async def test_chat_view_scroll_guard_when_all_rendered(sample_agent_types):
-    """watch_scroll_y does nothing when all messages are already rendered."""
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}",
-            "parentUuid": None,
-            "agentId": "agent-aaa",
-            "role": "assistant",
-            "content": f"Message number {i}",
-            "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z",
-            "promptId": "mtg-001",
-            "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        assert chat._rendered_count == 50  # All rendered, < PAGE_SIZE
-        chat.watch_scroll_y(0.0, 999.0)
-        await pilot.pause()
-        assert chat._rendered_count == 50  # Unchanged
-
-
-async def test_chat_view_filter_resets_pagination(sample_agent_types):
-    """Applying a filter resets to the first page."""
-    messages = []
-    for i in range(200):
-        agent_type = "web-search-researcher" if i % 2 == 0 else "general-purpose"
-        messages.append({
-            "uuid": f"msg-{i:04d}",
-            "parentUuid": None,
-            "agentId": f"agent-{agent_type[:3]}",
-            "role": "assistant",
-            "content": f"Message number {i}",
-            "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001",
-            "agentType": agent_type,
-            "teamName": "Test",
-        })
-    app = ChatViewApp()
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
-        await pilot.pause()
-        assert chat._rendered_count == chat.PAGE_SIZE
-        chat.apply_filters(agent_filter={"web-search-researcher"})
-        await pilot.pause()
-        assert chat.message_count == 100
-        assert chat._rendered_count == chat.PAGE_SIZE
+        pool_texts = [str(w.content) for w in chat._pool]
+        assert any("No messages match" in t for t in pool_texts)
 
 
 def test_build_rows_header_on_agent_change():
@@ -436,3 +271,169 @@ def test_build_rows_empty_list():
     """Empty message list produces empty row list."""
     rows = _build_rows([], {})
     assert rows == []
+
+
+async def test_chat_view_pool_size_matches_height():
+    """Widget pool size equals the ChatView height."""
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        await pilot.pause()
+        assert len(chat._pool) == chat.size.height
+
+
+async def test_chat_view_refresh_pool_updates_content(sample_messages, sample_agent_types):
+    """Loading messages updates pool widget content."""
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        first_content = str(chat._pool[0].content)
+        assert first_content != ""
+
+
+async def test_chat_view_scroll_down(sample_agent_types):
+    """Down arrow increments scroll offset when content exceeds viewport."""
+    # Enough messages so rows > pool height (24), enabling scrolling
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        assert chat._scroll_offset == 0
+        await pilot.press("down")
+        await pilot.pause()
+        assert chat._scroll_offset == 1
+
+
+async def test_chat_view_scroll_clamps_at_top(sample_agent_types):
+    """Up arrow at top stays at offset 0."""
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        assert chat._scroll_offset == 0
+        await pilot.press("up")
+        await pilot.pause()
+        assert chat._scroll_offset == 0
+
+
+async def test_chat_view_scroll_clamps_at_bottom(sample_agent_types):
+    """Scroll offset clamps so last row is visible."""
+    messages = []
+    for i in range(10):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
+            "agentType": "web-search-researcher", "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        await pilot.press("end")
+        await pilot.pause()
+        max_offset = max(0, len(chat._rows) - len(chat._pool))
+        assert chat._scroll_offset == max_offset
+
+
+async def test_chat_view_page_down(sample_agent_types):
+    """Page down advances by pool size."""
+    messages = []
+    for i in range(100):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001", "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        pool_size = len(chat._pool)
+        await pilot.press("pagedown")
+        await pilot.pause()
+        assert chat._scroll_offset == pool_size
+
+
+async def test_chat_view_empty_state_via_pool():
+    """Empty state renders hint text through the pool."""
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        await pilot.pause()
+        assert len(chat._pool) > 0
+        pool_texts = [str(w.content) for w in chat._pool]
+        assert any("Select a session" in t for t in pool_texts)
+
+
+async def test_chat_view_resize_rebuilds_pool():
+    """Resize rebuilds the pool to match new height."""
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        await pilot.pause()
+        old_pool_size = len(chat._pool)
+        assert old_pool_size > 0
+        await pilot.resize_terminal(80, 40)
+        await pilot.pause()
+        new_pool_size = len(chat._pool)
+        assert new_pool_size != old_pool_size
+        assert new_pool_size > 0
+
+
+async def test_chat_view_filter_resets_scroll(sample_agent_types):
+    """Applying a filter resets scroll offset to 0."""
+    messages = []
+    for i in range(100):
+        messages.append({
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001", "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        chat.focus()
+        await pilot.pause()
+        await pilot.press("pagedown")
+        await pilot.pause()
+        assert chat._scroll_offset > 0
+        chat.apply_filters(search_query="Message 5")
+        await pilot.pause()
+        assert chat._scroll_offset == 0
