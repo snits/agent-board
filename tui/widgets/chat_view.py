@@ -221,6 +221,15 @@ class ChatView(VerticalScroll):
                 classes="load-more",
             ))
 
+    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
+        """Load next page when scrolled near the bottom."""
+        if self._rendered_count >= len(self._filtered_messages):
+            return
+        # max_scroll_y may be 0 in headless tests; treat that as "at bottom"
+        at_bottom = self.max_scroll_y <= 0 or new_value >= self.max_scroll_y - 2
+        if at_bottom:
+            self._render_page()
+
     def toggle_tool_detail(self) -> None:
         """Toggle between collapsed and expanded tool use display."""
         self._tool_expanded = not self._tool_expanded

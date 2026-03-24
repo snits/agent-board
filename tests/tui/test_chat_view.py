@@ -256,6 +256,63 @@ async def test_chat_view_large_session_shows_indicator(sample_agent_types):
         assert len(indicators) == 1
 
 
+async def test_chat_view_loads_more_on_scroll(sample_agent_types):
+    """watch_scroll_y triggers next page when near bottom."""
+    messages = []
+    for i in range(250):
+        messages.append({
+            "uuid": f"msg-{i:04d}",
+            "parentUuid": None,
+            "agentId": "agent-aaa",
+            "role": "assistant",
+            "content": f"Message number {i}",
+            "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001",
+            "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        assert chat._rendered_count == chat.PAGE_SIZE
+        # Simulate scroll near bottom by calling the watcher directly.
+        # Headless Textual may not compute real scroll geometry, so we
+        # invoke the watcher with values that satisfy the threshold.
+        chat.watch_scroll_y(0.0, 999.0)
+        await pilot.pause()
+        assert chat._rendered_count == chat.PAGE_SIZE * 2
+
+
+async def test_chat_view_scroll_guard_when_all_rendered(sample_agent_types):
+    """watch_scroll_y does nothing when all messages are already rendered."""
+    messages = []
+    for i in range(50):
+        messages.append({
+            "uuid": f"msg-{i:04d}",
+            "parentUuid": None,
+            "agentId": "agent-aaa",
+            "role": "assistant",
+            "content": f"Message number {i}",
+            "toolUse": [],
+            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z",
+            "promptId": "mtg-001",
+            "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        assert chat._rendered_count == 50  # All rendered, < PAGE_SIZE
+        chat.watch_scroll_y(0.0, 999.0)
+        await pilot.pause()
+        assert chat._rendered_count == 50  # Unchanged
+
+
 async def test_chat_view_filter_resets_pagination(sample_agent_types):
     """Applying a filter resets to the first page."""
     messages = []
