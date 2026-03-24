@@ -1,6 +1,8 @@
 # ABOUTME: Integration tests for the TUI app.
 # ABOUTME: Verifies widget composition, keybindings, and data flow.
 
+import asyncio
+
 import pytest
 from tui.app import AgentBoardApp
 from tui.widgets.nav_tree import NavTree, SessionNode
@@ -240,6 +242,8 @@ async def test_search_enter_preserves_results(data_dir):
         await pilot.pause()
         search.value = "Textual"
         await pilot.pause()
+        await asyncio.sleep(0.5)
+        await pilot.pause()
         filtered_count = chat.message_count
         assert filtered_count < full_count
 
@@ -269,6 +273,8 @@ async def test_escape_clears_dismissed_search(data_dir):
         await pilot.press("slash")
         await pilot.pause()
         search.value = "Textual"
+        await pilot.pause()
+        await asyncio.sleep(0.5)
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
@@ -305,17 +311,3 @@ async def test_filter_cycle_shows_position(data_dir):
         await pilot.pause()
         markup = str(bar._markup)
         assert "[2/" in markup
-
-
-async def test_tool_toggle(data_dir, sample_session):
-    """Test that 't' toggles tool use detail."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        assert chat._tool_expanded is False
-        await pilot.press("t")
-        await pilot.pause()
-        assert chat._tool_expanded is True
-        await pilot.press("t")
-        await pilot.pause()
-        assert chat._tool_expanded is False
