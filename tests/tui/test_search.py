@@ -1,6 +1,8 @@
 # ABOUTME: Tests for search and agent filtering functionality.
 # ABOUTME: Verifies text search matching, agent type filtering, and search bar widget behavior.
 
+import asyncio
+
 import pytest
 from textual.app import App, ComposeResult
 
@@ -120,3 +122,86 @@ async def test_search_bar_enter_dismisses_not_clears():
         await pilot.pause()
         assert not bar.has_class("-visible")
         assert bar.value == "test query"
+
+
+async def test_search_bar_debounces_input():
+    """Rapid typing only fires SearchChanged once after a pause."""
+    received = []
+
+    class CapturingApp(App):
+        def compose(self) -> ComposeResult:
+            yield SearchBar()
+
+        def on_search_bar_search_changed(self, event: SearchBar.SearchChanged) -> None:
+            received.append(event.query)
+
+    app = CapturingApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        # Type rapidly
+        bar.value = "h"
+        await pilot.pause()
+        bar.value = "he"
+        await pilot.pause()
+        bar.value = "hel"
+        await pilot.pause()
+        # Wait for debounce to fire (300ms + buffer)
+        await asyncio.sleep(0.5)
+        await pilot.pause()
+        # Should have received only the final value, not intermediate ones
+        assert received[-1] == "hel"
+        # Should NOT have received all 3 intermediate values
+        assert len([q for q in received if q in ("h", "he", "hel")]) < 3
+
+
+async def test_search_bar_clear_fires_immediately():
+    """clear() posts SearchChanged immediately, not after debounce delay."""
+    received = []
+
+    class CapturingApp(App):
+        def compose(self) -> ComposeResult:
+            yield SearchBar()
+
+        def on_search_bar_search_changed(self, event: SearchBar.SearchChanged) -> None:
+            received.append(event.query)
+
+    app = CapturingApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        bar.value = "test"
+        await asyncio.sleep(0.5)
+        await pilot.pause()
+        received.clear()
+        bar.clear()
+        await pilot.pause()
+        # Should have received empty string immediately
+        assert "" in received
+
+
+async def test_search_bar_submit_fires_immediately():
+    """Pressing Enter posts current value immediately."""
+    received = []
+
+    class CapturingApp(App):
+        def compose(self) -> ComposeResult:
+            yield SearchBar()
+
+        def on_search_bar_search_changed(self, event: SearchBar.SearchChanged) -> None:
+            received.append(event.query)
+
+    app = CapturingApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        bar.value = "query"
+        await pilot.pause()
+        received.clear()
+        # Submit immediately fires
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "query" in received

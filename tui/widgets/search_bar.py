@@ -2,6 +2,7 @@
 # ABOUTME: Provides a hideable search input that posts query change messages.
 
 from textual.message import Message
+from textual.timer import Timer
 from textual.widgets import Input
 
 
@@ -21,6 +22,8 @@ class SearchBar(Input):
     }
     """
 
+    DEBOUNCE_SECONDS = 0.3
+
     class SearchChanged(Message):
         """Posted when the search query changes."""
 
@@ -30,6 +33,18 @@ class SearchBar(Input):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(placeholder="Search messages...", **kwargs)
+        self._debounce_timer: Timer | None = None
+
+    def _cancel_debounce(self) -> None:
+        """Cancel any pending debounce timer."""
+        if self._debounce_timer is not None:
+            self._debounce_timer.stop()
+            self._debounce_timer = None
+
+    def _fire_search(self) -> None:
+        """Post the current value as a SearchChanged message."""
+        self._debounce_timer = None
+        self.post_message(self.SearchChanged(self.value))
 
     def show(self) -> None:
         """Show the search bar and focus it."""
@@ -42,14 +57,20 @@ class SearchBar(Input):
 
     def clear(self) -> None:
         """Hide the search bar and clear the query."""
+        self._cancel_debounce()
         self.remove_class("-visible")
         self.value = ""
         self.post_message(self.SearchChanged(""))
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Forward input changes as search queries."""
-        self.post_message(self.SearchChanged(self.value))
+        """Debounce input changes before posting search queries."""
+        self._cancel_debounce()
+        self._debounce_timer = self.set_timer(
+            self.DEBOUNCE_SECONDS, self._fire_search
+        )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Dismiss on Enter — keep the filter active."""
+        """Dismiss on Enter — fire immediately and keep the filter active."""
+        self._cancel_debounce()
+        self.post_message(self.SearchChanged(self.value))
         self.dismiss()
