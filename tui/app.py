@@ -43,7 +43,7 @@ class AgentBoardApp(App):
         Binding("slash", "show_search", "Search", key_display="/", priority=True),
         Binding("f", "toggle_agent_filter", "Filter agents"),
 
-        Binding("v", "toggle_detail", "Detail", show=False),
+        Binding("v", "toggle_detail", "Detail"),
         Binding("tab", "switch_focus", "Switch panel", show=False),
         Binding("escape", "escape", "Back", show=False, priority=True),
         Binding("r", "refresh_data", "Refresh data"),
