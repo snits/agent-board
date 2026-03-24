@@ -98,9 +98,14 @@ class ChatView(VerticalScroll):
     EMPTY_STATE_HINT = "Select a session from the tree"
     EMPTY_FILTER_HINT = "No messages match current filters"
 
+    PAGE_SIZE = 100
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.message_count = 0
+        self._all_messages: list[dict] = []
+        self._filtered_messages: list[dict] = []
+        self._rendered_count = 0
         self._meeting_data = None
         self._agent_types = {}
         self._tool_expanded = False
@@ -108,9 +113,12 @@ class ChatView(VerticalScroll):
         self._agent_filter: set[str] = set()
 
     def clear_meeting(self) -> None:
-        """Clear the current meeting and show the empty state."""
+        """Clear the current session and show the empty state."""
         self._meeting_data = None
         self._agent_types = {}
+        self._all_messages = []
+        self._filtered_messages = []
+        self._rendered_count = 0
         self._search_query = ""
         self._agent_filter = set()
         self.message_count = 0
@@ -122,13 +130,16 @@ class ChatView(VerticalScroll):
         self._agent_types = agent_types
         self._search_query = ""
         self._agent_filter = set()
-        self._render_messages()
+        raw = meeting_data.get("messages", [])
+        _precompute_messages(raw)
+        self._all_messages = [m for m in raw if not m.get("_is_empty")]
+        self._apply_and_render()
 
     def apply_filters(self, search_query: str = "", agent_filter: set[str] | None = None) -> None:
-        """Apply search and agent filters, then re-render."""
+        """Apply search and agent filters, then re-render first page."""
         self._search_query = search_query
         self._agent_filter = agent_filter or set()
-        self._render_messages()
+        self._apply_and_render()
 
     def on_mount(self) -> None:
         """Show initial empty state on mount."""
@@ -140,33 +151,38 @@ class ChatView(VerticalScroll):
         self.remove_children()
         self.mount(Static(f"[dim]{text}[/]", classes="empty-state"))
 
-    def _render_messages(self) -> None:
-        """Build message widgets from meeting data."""
-        self.remove_children()
-        self.message_count = 0
-
-        if not self._meeting_data:
-            self._show_empty_state(self.EMPTY_STATE_HINT)
-            return
-
-        messages = [m for m in self._meeting_data.get("messages", []) if not is_empty_message(m)]
-
-        # Apply agent filter
+    def _apply_and_render(self) -> None:
+        """Filter messages and render the first page."""
+        messages = self._all_messages
         if self._agent_filter:
             messages = filter_by_agents(messages, self._agent_filter)
-
-        # Apply search filter
         if self._search_query:
             messages = [m for m in messages if matches_search(m, self._search_query)]
-
+        self._filtered_messages = messages
         self.message_count = len(messages)
-
+        self.remove_children()
+        self._rendered_count = 0
         if self.message_count == 0:
-            self._show_empty_state(self.EMPTY_FILTER_HINT)
+            hint = self.EMPTY_STATE_HINT if not self._all_messages else self.EMPTY_FILTER_HINT
+            self._show_empty_state(hint)
             return
+        self._render_page()
+
+    def _render_page(self) -> None:
+        """Mount the next PAGE_SIZE messages as widgets."""
+        for indicator in self.query(".load-more"):
+            indicator.remove()
+
+        start = self._rendered_count
+        end = min(start + self.PAGE_SIZE, len(self._filtered_messages))
+        page = self._filtered_messages[start:end]
 
         prev_agent = None
-        for msg in messages:
+        if start > 0 and start <= len(self._filtered_messages):
+            prev_msg = self._filtered_messages[start - 1]
+            prev_agent = prev_msg.get("agentId")
+
+        for msg in page:
             agent_type = msg.get("agentType", "unknown")
             agent_id = msg.get("agentId", "")
             role = msg.get("role", "assistant")
@@ -176,7 +192,6 @@ class ChatView(VerticalScroll):
             color = type_info.get("color", "#888888")
             label = type_info.get("label", agent_type)
 
-            # Group header — only show when agent changes
             if agent_id != prev_agent:
                 dim_open = "[dim]" if role == "user" else ""
                 dim_close = "[/dim]" if role == "user" else ""
@@ -184,27 +199,35 @@ class ChatView(VerticalScroll):
                 self.mount(Static(header, classes="msg-header"))
                 prev_agent = agent_id
 
-            # Message content
             if msg.get("content"):
                 content = msg["content"]
                 css_class = "msg-content msg-user" if role == "user" else "msg-content"
                 self.mount(Markdown(content, classes=css_class))
 
-            # Tool use
-            for tool in msg.get("toolUse", []):
+            tools = msg.get("toolUse", [])
+            for idx, tool in enumerate(tools):
                 if self._tool_expanded:
-                    self.mount(Markdown(_format_tool_expanded(tool), classes="tool-detail"))
+                    self.mount(Markdown(msg["_tool_expanded_text"][idx], classes="tool-detail"))
                 else:
-                    summary = format_tool_summary(tool)
+                    summary = msg["_tool_summaries"][idx]
                     self.mount(Static(f"[dim]{summary}[/]", classes="tool-summary"))
+
+        self._rendered_count = end
+
+        remaining = len(self._filtered_messages) - self._rendered_count
+        if remaining > 0:
+            self.mount(Static(
+                f"[dim]── {remaining:,} more messages ──[/]",
+                classes="load-more",
+            ))
 
     def toggle_tool_detail(self) -> None:
         """Toggle between collapsed and expanded tool use display."""
         self._tool_expanded = not self._tool_expanded
-        self._render_messages()
+        self._apply_and_render()
 
     def get_all_messages(self) -> list[dict]:
-        """Return the current meeting's non-empty messages."""
-        if not self._meeting_data:
+        """Return the current session's non-empty messages."""
+        if not self._all_messages:
             return []
-        return [m for m in self._meeting_data.get("messages", []) if not is_empty_message(m)]
+        return [m for m in self._all_messages if not m.get("_is_empty")]
