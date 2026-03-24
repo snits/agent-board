@@ -72,7 +72,7 @@ def _build_rows(
     rows: list[tuple[str, str]] = []
     prev_agent = None
 
-    for msg in messages:
+    for msg_idx, msg in enumerate(messages):
         agent_type = msg.get("agentType", "unknown")
         agent_id = msg.get("agentId", "")
         role = msg.get("role", "assistant")
@@ -82,11 +82,13 @@ def _build_rows(
         color = type_info.get("color", "#888888")
         label = type_info.get("label", agent_type)
 
+        alt = " msg-alt" if msg_idx % 2 == 1 else ""
+
         if agent_id != prev_agent:
             dim_open = "[dim]" if role == "user" else ""
             dim_close = "[/dim]" if role == "user" else ""
             header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-            rows.append((header, "msg-header"))
+            rows.append((header, f"msg-header{alt}"))
             prev_agent = agent_id
 
         content = msg.get("content", "")
@@ -97,10 +99,10 @@ def _build_rows(
             elif "\n" in content:
                 first_line = first_line + "…"
             css_class = "msg-content msg-user" if role == "user" else "msg-content"
-            rows.append((first_line, css_class))
+            rows.append((first_line, f"{css_class}{alt}"))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{summary}[/]", "tool-summary"))
+            rows.append((f"[dim]{summary}[/]", f"tool-summary{alt}"))
 
     return rows
 
@@ -117,6 +119,9 @@ class ChatView(Widget):
     }
     ChatView .msg-user {
         color: $text-muted;
+    }
+    ChatView .msg-alt {
+        background: $surface-darken-1;
     }
     """
 

@@ -193,12 +193,12 @@ def test_build_rows_header_on_agent_change():
     }
     rows = _build_rows(msgs, agent_types)
     assert len(rows) == 4
-    assert rows[0][1] == "msg-header"
+    assert "msg-header" in rows[0][1]
     assert "General" in rows[0][0]
-    assert rows[1][1] == "msg-content"
-    assert rows[2][1] == "msg-header"
+    assert "msg-content" in rows[1][1]
+    assert "msg-header" in rows[2][1]
     assert "Researcher" in rows[2][0]
-    assert rows[3][1] == "msg-content"
+    assert "msg-content" in rows[3][1]
 
 
 def test_build_rows_no_header_same_agent():
@@ -271,6 +271,52 @@ def test_build_rows_empty_list():
     """Empty message list produces empty row list."""
     rows = _build_rows([], {})
     assert rows == []
+
+
+def test_build_rows_alternates_shading():
+    """Consecutive messages alternate msg-alt class for visual distinction."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "First", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "first"},
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "Second", "toolUse": [], "timestamp": "2026-03-20T10:01:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "second"},
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "Third", "toolUse": [], "timestamp": "2026-03-20T10:02:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "third"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    # header + 3 content = 4 rows. Messages alternate: even(0), odd(1), even(2)
+    content_rows = [r for r in rows if "msg-content" in r[1]]
+    assert len(content_rows) == 3
+    assert "msg-alt" not in content_rows[0][1]  # msg 0: no alt
+    assert "msg-alt" in content_rows[1][1]       # msg 1: alt
+    assert "msg-alt" not in content_rows[2][1]  # msg 2: no alt
+
+
+def test_build_rows_alt_includes_header_and_tools():
+    """All rows from an alt message (header, content, tools) share msg-alt."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "First", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "first"},
+        {"agentId": "a2", "agentType": "general-purpose", "role": "assistant",
+         "content": "Second", "toolUse": [{"tool": "Read"}],
+         "timestamp": "2026-03-20T10:01:00.000Z",
+         "_is_empty": False, "_tool_summaries": ["⚙ Read → /app.py"],
+         "_search_text": "second"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    # msg 0: header + content (no alt). msg 1: header + content + tool (alt)
+    # Find the second message's rows (index 2, 3, 4)
+    assert "msg-alt" not in rows[0][1]  # msg 0 header
+    assert "msg-alt" not in rows[1][1]  # msg 0 content
+    assert "msg-alt" in rows[2][1]       # msg 1 header
+    assert "msg-alt" in rows[3][1]       # msg 1 content
+    assert "msg-alt" in rows[4][1]       # msg 1 tool
 
 
 async def test_chat_view_pool_size_matches_height():
