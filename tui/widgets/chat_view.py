@@ -67,9 +67,9 @@ def _precompute_messages(messages: list[dict]) -> None:
 
 def _build_rows(
     messages: list[dict], agent_types: dict
-) -> list[tuple[str, str]]:
-    """Convert filtered messages into a flat list of (markup, css_class) rows."""
-    rows: list[tuple[str, str]] = []
+) -> list[tuple[str, str, int]]:
+    """Convert filtered messages into a flat list of (markup, css_class, msg_index) rows."""
+    rows: list[tuple[str, str, int]] = []
     prev_agent = None
 
     for msg_idx, msg in enumerate(messages):
@@ -88,7 +88,7 @@ def _build_rows(
             dim_open = "[dim]" if role == "user" else ""
             dim_close = "[/dim]" if role == "user" else ""
             header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-            rows.append((header, f"msg-header{alt}"))
+            rows.append((header, f"msg-header{alt}", msg_idx))
             prev_agent = agent_id
 
         content = msg.get("content", "")
@@ -99,10 +99,10 @@ def _build_rows(
             elif "\n" in content:
                 first_line = first_line + "…"
             css_class = "msg-content msg-user" if role == "user" else "msg-content"
-            rows.append((first_line, f"{css_class}{alt}"))
+            rows.append((first_line, f"{css_class}{alt}", msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{summary}[/]", f"tool-summary{alt}"))
+            rows.append((f"[dim]{summary}[/]", f"tool-summary{alt}", msg_idx))
 
     return rows
 
@@ -135,7 +135,7 @@ class ChatView(Widget):
         self.message_count = 0
         self._all_messages: list[dict] = []
         self._filtered_messages: list[dict] = []
-        self._rows: list[tuple[str, str]] = []
+        self._rows: list[tuple[str, str, int]] = []
         self._pool: list[Static] = []
         self._scroll_offset = 0
         self._meeting_data = None
@@ -229,7 +229,7 @@ class ChatView(Widget):
         for i, widget in enumerate(self._pool):
             row_idx = self._scroll_offset + i
             if row_idx < len(self._rows):
-                markup, css_class = self._rows[row_idx]
+                markup, css_class, _msg_idx = self._rows[row_idx]
                 widget.update(markup)
                 widget.set_classes(css_class)
             else:

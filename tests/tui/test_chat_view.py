@@ -483,3 +483,26 @@ async def test_chat_view_filter_resets_scroll(sample_agent_types):
         chat.apply_filters(search_query="Message 5")
         await pilot.pause()
         assert chat._scroll_offset == 0
+
+
+def test_build_rows_includes_msg_index():
+    """Each row carries the index of its source message."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "First", "toolUse": [{"tool": "Read"}],
+         "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": ["⚙ Read → /app.py"],
+         "_search_text": "first"},
+        {"agentId": "a2", "agentType": "general-purpose", "role": "assistant",
+         "content": "Second", "toolUse": [],
+         "timestamp": "2026-03-20T10:01:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "second"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    assert all(len(r) == 3 for r in rows)
+    assert rows[0][2] == 0  # header
+    assert rows[1][2] == 0  # content
+    assert rows[2][2] == 0  # tool
+    assert rows[3][2] == 1  # header
+    assert rows[4][2] == 1  # content
