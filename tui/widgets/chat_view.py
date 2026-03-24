@@ -1,6 +1,7 @@
 # ABOUTME: Chat view widget for displaying grouped agent message streams.
 # ABOUTME: Renders tool use summaries and supports agent grouping via a virtual-scroll widget pool.
 
+from rich.markup import escape
 from textual.events import Key, Resize
 from textual.message import Message
 from textual.widget import Widget
@@ -100,10 +101,10 @@ def _build_rows(
             elif "\n" in content:
                 first_line = first_line + "…"
             css_class = "msg-content msg-user" if role == "user" else "msg-content"
-            rows.append((first_line, f"{css_class}{alt}", msg_idx))
+            rows.append((escape(first_line), f"{css_class}{alt}", msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{summary}[/]", f"tool-summary{alt}", msg_idx))
+            rows.append((f"[dim]{escape(summary)}[/]", f"tool-summary{alt}", msg_idx))
 
     return rows
 

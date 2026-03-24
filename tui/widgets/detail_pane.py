@@ -1,6 +1,7 @@
 # ABOUTME: Detail pane widget for showing full message content.
 # ABOUTME: Scrollable panel that renders the complete text of a focused message.
 
+from rich.markup import escape
 from textual.containers import ScrollableContainer
 from textual.widgets import Static
 
@@ -60,12 +61,12 @@ class DetailPane(ScrollableContainer):
         # Full content
         content = message.get("content", "")
         if content:
-            parts.append(content)
+            parts.append(escape(content))
             parts.append("")
 
         # Tool summaries
         for summary in message.get("_tool_summaries", []):
-            parts.append(f"[dim]{summary}[/]")
+            parts.append(f"[dim]{escape(summary)}[/]")
 
         self._content.update("\n".join(parts))
         self.scroll_home(animate=False)
