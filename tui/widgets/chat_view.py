@@ -75,6 +75,46 @@ def _precompute_messages(messages: list[dict]) -> None:
         msg["_search_text"] = "\n".join(parts).lower()
 
 
+def _build_rows(
+    messages: list[dict], agent_types: dict
+) -> list[tuple[str, str]]:
+    """Convert filtered messages into a flat list of (markup, css_class) rows."""
+    rows: list[tuple[str, str]] = []
+    prev_agent = None
+
+    for msg in messages:
+        agent_type = msg.get("agentType", "unknown")
+        agent_id = msg.get("agentId", "")
+        role = msg.get("role", "assistant")
+        timestamp = msg.get("timestamp", "")[:16].replace("T", " ")
+
+        type_info = agent_types.get(agent_type, {})
+        color = type_info.get("color", "#888888")
+        label = type_info.get("label", agent_type)
+
+        if agent_id != prev_agent:
+            dim_open = "[dim]" if role == "user" else ""
+            dim_close = "[/dim]" if role == "user" else ""
+            header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
+            rows.append((header, "msg-header"))
+            prev_agent = agent_id
+
+        content = msg.get("content", "")
+        if content:
+            first_line = content.split("\n", 1)[0]
+            if len(first_line) > 120:
+                first_line = first_line[:117] + "…"
+            elif "\n" in content:
+                first_line = first_line + "…"
+            css_class = "msg-content msg-user" if role == "user" else "msg-content"
+            rows.append((first_line, css_class))
+
+        for summary in msg.get("_tool_summaries", []):
+            rows.append((f"[dim]{summary}[/]", "tool-summary"))
+
+    return rows
+
+
 class ChatView(VerticalScroll):
     """Scrollable chat message stream with grouped agent messages."""
 

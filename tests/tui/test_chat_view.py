@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 
 from tui.widgets.chat_view import (
     ChatView, is_empty_message, format_tool_summary, matches_search,
-    filter_by_agents, _precompute_messages,
+    filter_by_agents, _precompute_messages, _build_rows,
 )
 
 
@@ -340,3 +340,99 @@ async def test_chat_view_filter_resets_pagination(sample_agent_types):
         await pilot.pause()
         assert chat.message_count == 100
         assert chat._rendered_count == chat.PAGE_SIZE
+
+
+def test_build_rows_header_on_agent_change():
+    """Headers are inserted when agentId changes."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "Hello", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "hello"},
+        {"agentId": "a2", "agentType": "web-search-researcher", "role": "assistant",
+         "content": "World", "toolUse": [], "timestamp": "2026-03-20T10:01:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "world"},
+    ]
+    agent_types = {
+        "general-purpose": {"color": "#FFFAC8", "label": "General"},
+        "web-search-researcher": {"color": "#DCBEFF", "label": "Researcher"},
+    }
+    rows = _build_rows(msgs, agent_types)
+    assert len(rows) == 4
+    assert rows[0][1] == "msg-header"
+    assert "General" in rows[0][0]
+    assert rows[1][1] == "msg-content"
+    assert rows[2][1] == "msg-header"
+    assert "Researcher" in rows[2][0]
+    assert rows[3][1] == "msg-content"
+
+
+def test_build_rows_no_header_same_agent():
+    """No header when consecutive messages share the same agentId."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "First", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "first"},
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "Second", "toolUse": [], "timestamp": "2026-03-20T10:01:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "second"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    assert len(rows) == 3
+    headers = [r for r in rows if r[1] == "msg-header"]
+    assert len(headers) == 1
+
+
+def test_build_rows_tool_rows():
+    """Tool uses produce separate tool-summary rows."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "Working", "toolUse": [{"tool": "Read"}, {"tool": "Write"}],
+         "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False,
+         "_tool_summaries": ["⚙ Read → /app.py", "⚙ Write → /out.py"],
+         "_search_text": "working"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    assert len(rows) == 4
+    tool_rows = [r for r in rows if r[1] == "tool-summary"]
+    assert len(tool_rows) == 2
+    assert "Read" in tool_rows[0][0]
+    assert "Write" in tool_rows[1][0]
+
+
+def test_build_rows_user_message_class():
+    """User messages get the msg-user class."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "user",
+         "content": "Question", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "question"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    content_rows = [r for r in rows if "msg-content" in r[1]]
+    assert len(content_rows) == 1
+    assert "msg-user" in content_rows[0][1]
+
+
+def test_build_rows_truncates_long_content():
+    """Long content is truncated to a single line."""
+    msgs = [
+        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
+         "content": "Line one\nLine two\nLine three",
+         "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
+         "_is_empty": False, "_tool_summaries": [], "_search_text": "line"},
+    ]
+    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
+    rows = _build_rows(msgs, agent_types)
+    content_rows = [r for r in rows if "msg-content" in r[1]]
+    assert len(content_rows) == 1
+    assert "\n" not in content_rows[0][0]
+    assert "…" in content_rows[0][0]
+
+
+def test_build_rows_empty_list():
+    """Empty message list produces empty row list."""
+    rows = _build_rows([], {})
+    assert rows == []
