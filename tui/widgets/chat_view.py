@@ -2,6 +2,7 @@
 # ABOUTME: Renders tool use summaries and supports agent grouping via a virtual-scroll widget pool.
 
 from textual.events import Key, Resize
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Static
 
@@ -67,9 +68,9 @@ def _precompute_messages(messages: list[dict]) -> None:
 
 def _build_rows(
     messages: list[dict], agent_types: dict
-) -> list[tuple[str, str]]:
-    """Convert filtered messages into a flat list of (markup, css_class) rows."""
-    rows: list[tuple[str, str]] = []
+) -> list[tuple[str, str, int]]:
+    """Convert filtered messages into a flat list of (markup, css_class, msg_index) rows."""
+    rows: list[tuple[str, str, int]] = []
     prev_agent = None
 
     for msg_idx, msg in enumerate(messages):
@@ -88,7 +89,7 @@ def _build_rows(
             dim_open = "[dim]" if role == "user" else ""
             dim_close = "[/dim]" if role == "user" else ""
             header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-            rows.append((header, f"msg-header{alt}"))
+            rows.append((header, f"msg-header{alt}", msg_idx))
             prev_agent = agent_id
 
         content = msg.get("content", "")
@@ -99,10 +100,10 @@ def _build_rows(
             elif "\n" in content:
                 first_line = first_line + "…"
             css_class = "msg-content msg-user" if role == "user" else "msg-content"
-            rows.append((first_line, f"{css_class}{alt}"))
+            rows.append((first_line, f"{css_class}{alt}", msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{summary}[/]", f"tool-summary{alt}"))
+            rows.append((f"[dim]{summary}[/]", f"tool-summary{alt}", msg_idx))
 
     return rows
 
@@ -113,6 +114,7 @@ class ChatView(Widget):
     DEFAULT_CSS = """
     ChatView {
         width: 3fr;
+        height: 3fr;
         min-width: 40;
         layout: vertical;
         overflow: hidden;
@@ -123,9 +125,18 @@ class ChatView(Widget):
     ChatView .msg-alt {
         background: $surface-darken-1;
     }
+    ChatView .cursor {
+        background: $accent-darken-1;
+    }
     """
 
     can_focus = True
+
+    class MessageFocused(Message):
+        """Posted when cursor moves to a different message."""
+        def __init__(self, message: dict) -> None:
+            super().__init__()
+            self.message = message
 
     EMPTY_STATE_HINT = "Select a session from the tree"
     EMPTY_FILTER_HINT = "No messages match current filters"
@@ -135,9 +146,11 @@ class ChatView(Widget):
         self.message_count = 0
         self._all_messages: list[dict] = []
         self._filtered_messages: list[dict] = []
-        self._rows: list[tuple[str, str]] = []
+        self._rows: list[tuple[str, str, int]] = []
         self._pool: list[Static] = []
         self._scroll_offset = 0
+        self._cursor_pos = 0
+        self._last_focused_msg_idx = -1
         self._meeting_data = None
         self._agent_types = {}
         self._search_query = ""
@@ -175,6 +188,8 @@ class ChatView(Widget):
         self._filtered_messages = []
         self._rows = []
         self._scroll_offset = 0
+        self._cursor_pos = 0
+        self._last_focused_msg_idx = -1
         self._search_query = ""
         self._agent_filter = set()
         self.message_count = 0
@@ -208,6 +223,8 @@ class ChatView(Widget):
         self.message_count = len(messages)
         self._rows = _build_rows(messages, self._agent_types)
         self._scroll_offset = 0
+        self._cursor_pos = 0
+        self._last_focused_msg_idx = -1
         if self.message_count == 0:
             hint = self.EMPTY_STATE_HINT if not self._all_messages else self.EMPTY_FILTER_HINT
             self._show_empty_hint(hint)
@@ -229,7 +246,9 @@ class ChatView(Widget):
         for i, widget in enumerate(self._pool):
             row_idx = self._scroll_offset + i
             if row_idx < len(self._rows):
-                markup, css_class = self._rows[row_idx]
+                markup, css_class, _msg_idx = self._rows[row_idx]
+                if row_idx == self._cursor_pos:
+                    css_class += " cursor"
                 widget.update(markup)
                 widget.set_classes(css_class)
             else:
@@ -241,28 +260,48 @@ class ChatView(Widget):
         max_offset = max(0, len(self._rows) - len(self._pool))
         self._scroll_offset = max(0, min(self._scroll_offset, max_offset))
 
+    def _ensure_cursor_visible(self) -> None:
+        """Adjust scroll offset so cursor row is within the visible pool."""
+        if self._cursor_pos < self._scroll_offset:
+            self._scroll_offset = self._cursor_pos
+        elif self._cursor_pos >= self._scroll_offset + len(self._pool):
+            self._scroll_offset = self._cursor_pos - len(self._pool) + 1
+        self._clamp_offset()
+
+    def _post_message_focused(self) -> None:
+        """Post MessageFocused if cursor moved to a different message."""
+        if not self._rows or self._cursor_pos >= len(self._rows):
+            return
+        _markup, _css, msg_idx = self._rows[self._cursor_pos]
+        if msg_idx != self._last_focused_msg_idx:
+            self._last_focused_msg_idx = msg_idx
+            if msg_idx < len(self._filtered_messages):
+                self.post_message(self.MessageFocused(self._filtered_messages[msg_idx]))
+
     def on_key(self, event: Key) -> None:
-        """Handle scroll keys."""
+        """Handle cursor movement keys."""
         if not self._rows:
             return
         pool_size = len(self._pool)
         if event.key == "down":
-            self._scroll_offset += 1
+            self._cursor_pos += 1
         elif event.key == "up":
-            self._scroll_offset -= 1
+            self._cursor_pos -= 1
         elif event.key == "pagedown":
-            self._scroll_offset += pool_size
+            self._cursor_pos += pool_size
         elif event.key == "pageup":
-            self._scroll_offset -= pool_size
+            self._cursor_pos -= pool_size
         elif event.key == "home":
-            self._scroll_offset = 0
+            self._cursor_pos = 0
         elif event.key == "end":
-            self._scroll_offset = max(0, len(self._rows) - len(self._pool))
+            self._cursor_pos = len(self._rows) - 1
         else:
             return
         event.prevent_default()
-        self._clamp_offset()
+        self._cursor_pos = max(0, min(self._cursor_pos, len(self._rows) - 1))
+        self._ensure_cursor_visible()
         self._refresh_pool()
+        self._post_message_focused()
 
     def get_all_messages(self) -> list[dict]:
         """Return the current session's non-empty messages."""
