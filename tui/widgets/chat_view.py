@@ -1,10 +1,9 @@
 # ABOUTME: Chat view widget for displaying grouped agent message streams.
-# ABOUTME: Renders markdown content, tool use summaries, and supports agent grouping.
+# ABOUTME: Renders tool use summaries and supports agent grouping via a virtual-scroll widget pool.
 
-import json
-
-from textual.containers import VerticalScroll
-from textual.widgets import Markdown, Static
+from textual.events import Key, Resize
+from textual.widget import Widget
+from textual.widgets import Static
 
 
 def is_empty_message(msg: dict) -> bool:
@@ -38,14 +37,6 @@ def format_tool_summary(tool: dict) -> str:
     return f"⚙ {name}"
 
 
-def _format_tool_expanded(tool: dict) -> str:
-    """Format a tool use block with full input detail."""
-    name = tool.get("tool", "Unknown")
-    tool_input = tool.get("input", {})
-    input_str = json.dumps(tool_input, indent=2)
-    return f"⚙ {name}\n```json\n{input_str}\n```"
-
-
 def matches_search(msg: dict, query: str) -> bool:
     """Check if a message matches a search query (case-insensitive)."""
     if not query:
@@ -66,7 +57,6 @@ def _precompute_messages(messages: list[dict]) -> None:
         msg["_is_empty"] = not msg.get("content") and not msg.get("toolUse")
         tools = msg.get("toolUse", [])
         msg["_tool_summaries"] = [format_tool_summary(t) for t in tools]
-        msg["_tool_expanded_text"] = [_format_tool_expanded(t) for t in tools]
         # Single search string: content + all tool names + all tool summaries
         parts = [msg.get("content", "")]
         for tool in tools:
@@ -115,43 +105,62 @@ def _build_rows(
     return rows
 
 
-class ChatView(VerticalScroll):
-    """Scrollable chat message stream with grouped agent messages."""
+class ChatView(Widget):
+    """Virtual-scroll chat view using a fixed widget pool."""
 
     DEFAULT_CSS = """
     ChatView {
         width: 3fr;
         min-width: 40;
+        layout: vertical;
+        overflow: hidden;
     }
     ChatView .msg-user {
-        border-left: thick $accent-darken-2;
-        padding-left: 1;
         color: $text-muted;
-    }
-    ChatView .empty-state {
-        margin-top: 2;
-        text-align: center;
-        width: 100%;
     }
     """
 
+    can_focus = True
+
     EMPTY_STATE_HINT = "Select a session from the tree"
     EMPTY_FILTER_HINT = "No messages match current filters"
-
-    PAGE_SIZE = 100
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.message_count = 0
         self._all_messages: list[dict] = []
         self._filtered_messages: list[dict] = []
-        self._rendered_count = 0
-        self._loading_page = False
+        self._rows: list[tuple[str, str]] = []
+        self._pool: list[Static] = []
+        self._scroll_offset = 0
         self._meeting_data = None
         self._agent_types = {}
-        self._tool_expanded = False
         self._search_query = ""
         self._agent_filter: set[str] = set()
+
+    def on_mount(self) -> None:
+        """Build the widget pool sized to the viewport."""
+        self._build_pool()
+        if not self._meeting_data:
+            self._show_empty_hint(self.EMPTY_STATE_HINT)
+
+    def on_resize(self, event: Resize) -> None:
+        """Rebuild pool when terminal is resized."""
+        self._build_pool()
+        if self._rows:
+            self._refresh_pool()
+        elif not self._meeting_data:
+            self._show_empty_hint(self.EMPTY_STATE_HINT)
+
+    def _build_pool(self) -> None:
+        """Create or recreate the fixed pool of Static widgets."""
+        self.remove_children()
+        self._pool = []
+        pool_size = self.size.height
+        for _ in range(pool_size):
+            widget = Static("")
+            self.mount(widget)
+            self._pool.append(widget)
 
     def clear_meeting(self) -> None:
         """Clear the current session and show the empty state."""
@@ -159,11 +168,12 @@ class ChatView(VerticalScroll):
         self._agent_types = {}
         self._all_messages = []
         self._filtered_messages = []
-        self._rendered_count = 0
+        self._rows = []
+        self._scroll_offset = 0
         self._search_query = ""
         self._agent_filter = set()
         self.message_count = 0
-        self._show_empty_state(self.EMPTY_STATE_HINT)
+        self._show_empty_hint(self.EMPTY_STATE_HINT)
 
     def load_messages(self, meeting_data: dict, agent_types: dict) -> None:
         """Load and render a session's messages."""
@@ -177,23 +187,13 @@ class ChatView(VerticalScroll):
         self._apply_and_render()
 
     def apply_filters(self, search_query: str = "", agent_filter: set[str] | None = None) -> None:
-        """Apply search and agent filters, then re-render first page."""
+        """Apply search and agent filters, then refresh the pool."""
         self._search_query = search_query
         self._agent_filter = agent_filter or set()
         self._apply_and_render()
 
-    def on_mount(self) -> None:
-        """Show initial empty state on mount."""
-        if not self._meeting_data:
-            self._show_empty_state(self.EMPTY_STATE_HINT)
-
-    def _show_empty_state(self, text: str) -> None:
-        """Display a centered placeholder message."""
-        self.remove_children()
-        self.mount(Static(f"[dim]{text}[/]", classes="empty-state"))
-
     def _apply_and_render(self) -> None:
-        """Filter messages and render the first page."""
+        """Filter messages, build rows, and refresh the pool."""
         messages = self._all_messages
         if self._agent_filter:
             messages = filter_by_agents(messages, self._agent_filter)
@@ -201,84 +201,63 @@ class ChatView(VerticalScroll):
             messages = [m for m in messages if matches_search(m, self._search_query)]
         self._filtered_messages = messages
         self.message_count = len(messages)
-        self.remove_children()
-        self._rendered_count = 0
+        self._rows = _build_rows(messages, self._agent_types)
+        self._scroll_offset = 0
         if self.message_count == 0:
             hint = self.EMPTY_STATE_HINT if not self._all_messages else self.EMPTY_FILTER_HINT
-            self._show_empty_state(hint)
+            self._show_empty_hint(hint)
+        else:
+            self._refresh_pool()
+
+    def _show_empty_hint(self, text: str) -> None:
+        """Display a hint message using the pool."""
+        self._rows = []
+        for widget in self._pool:
+            widget.update("")
+            widget.set_classes("")
+        if self._pool:
+            mid = len(self._pool) // 3
+            self._pool[mid].update(f"[dim]{text}[/]")
+
+    def _refresh_pool(self) -> None:
+        """Update pool widget content from rows at current scroll offset."""
+        for i, widget in enumerate(self._pool):
+            row_idx = self._scroll_offset + i
+            if row_idx < len(self._rows):
+                markup, css_class = self._rows[row_idx]
+                widget.update(markup)
+                widget.set_classes(css_class)
+            else:
+                widget.update("")
+                widget.set_classes("")
+
+    def _clamp_offset(self) -> None:
+        """Ensure scroll offset stays within valid bounds."""
+        max_offset = max(0, len(self._rows) - len(self._pool))
+        self._scroll_offset = max(0, min(self._scroll_offset, max_offset))
+
+    def on_key(self, event: Key) -> None:
+        """Handle scroll keys."""
+        if not self._rows:
             return
-        self._render_page()
-
-    def _render_page(self) -> None:
-        """Mount the next PAGE_SIZE messages as widgets."""
-        self._loading_page = True
-        for indicator in self.query(".load-more"):
-            indicator.remove()
-
-        start = self._rendered_count
-        end = min(start + self.PAGE_SIZE, len(self._filtered_messages))
-        page = self._filtered_messages[start:end]
-
-        prev_agent = None
-        if start > 0 and start <= len(self._filtered_messages):
-            prev_msg = self._filtered_messages[start - 1]
-            prev_agent = prev_msg.get("agentId")
-
-        for msg in page:
-            agent_type = msg.get("agentType", "unknown")
-            agent_id = msg.get("agentId", "")
-            role = msg.get("role", "assistant")
-            timestamp = msg.get("timestamp", "")[:16].replace("T", " ")
-
-            type_info = self._agent_types.get(agent_type, {})
-            color = type_info.get("color", "#888888")
-            label = type_info.get("label", agent_type)
-
-            if agent_id != prev_agent:
-                dim_open = "[dim]" if role == "user" else ""
-                dim_close = "[/dim]" if role == "user" else ""
-                header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-                self.mount(Static(header, classes="msg-header"))
-                prev_agent = agent_id
-
-            if msg.get("content"):
-                content = msg["content"]
-                css_class = "msg-content msg-user" if role == "user" else "msg-content"
-                self.mount(Markdown(content, classes=css_class))
-
-            tools = msg.get("toolUse", [])
-            for idx, tool in enumerate(tools):
-                if self._tool_expanded:
-                    self.mount(Markdown(msg["_tool_expanded_text"][idx], classes="tool-detail"))
-                else:
-                    summary = msg["_tool_summaries"][idx]
-                    self.mount(Static(f"[dim]{summary}[/]", classes="tool-summary"))
-
-        self._rendered_count = end
-
-        remaining = len(self._filtered_messages) - self._rendered_count
-        if remaining > 0:
-            self.mount(Static(
-                f"[dim]── {remaining:,} more messages ──[/]",
-                classes="load-more",
-            ))
-        self._loading_page = False
-
-    def watch_scroll_y(self, old_value: float, new_value: float) -> None:
-        """Load next page when scrolled near the bottom."""
-        if self._loading_page:
+        pool_size = len(self._pool)
+        if event.key == "down":
+            self._scroll_offset += 1
+        elif event.key == "up":
+            self._scroll_offset -= 1
+        elif event.key == "pagedown":
+            self._scroll_offset += pool_size
+        elif event.key == "pageup":
+            self._scroll_offset -= pool_size
+        elif event.key == "home":
+            self._scroll_offset = 0
+        elif event.key == "end":
+            self._scroll_offset = max(0, len(self._rows) - len(self._pool))
+        else:
             return
-        if self._rendered_count >= len(self._filtered_messages):
-            return
-        # max_scroll_y may be 0 in headless tests; treat that as "at bottom"
-        at_bottom = self.max_scroll_y <= 0 or new_value >= self.max_scroll_y - 2
-        if at_bottom:
-            self._render_page()
-
-    def toggle_tool_detail(self) -> None:
-        """Toggle between collapsed and expanded tool use display."""
-        self._tool_expanded = not self._tool_expanded
-        self._apply_and_render()
+        event.prevent_default()
+        self._clamp_offset()
+        self._refresh_pool()
 
     def get_all_messages(self) -> list[dict]:
         """Return the current session's non-empty messages."""

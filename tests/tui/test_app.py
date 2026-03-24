@@ -311,17 +311,3 @@ async def test_filter_cycle_shows_position(data_dir):
         await pilot.pause()
         markup = str(bar._markup)
         assert "[2/" in markup
-
-
-async def test_tool_toggle(data_dir, sample_session):
-    """Test that 't' toggles tool use detail."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test() as pilot:
-        chat = app.query_one(ChatView)
-        assert chat._tool_expanded is False
-        await pilot.press("t")
-        await pilot.pause()
-        assert chat._tool_expanded is True
-        await pilot.press("t")
-        await pilot.pause()
-        assert chat._tool_expanded is False
