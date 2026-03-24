@@ -106,6 +106,7 @@ class ChatView(VerticalScroll):
         self._all_messages: list[dict] = []
         self._filtered_messages: list[dict] = []
         self._rendered_count = 0
+        self._loading_page = False
         self._meeting_data = None
         self._agent_types = {}
         self._tool_expanded = False
@@ -170,6 +171,7 @@ class ChatView(VerticalScroll):
 
     def _render_page(self) -> None:
         """Mount the next PAGE_SIZE messages as widgets."""
+        self._loading_page = True
         for indicator in self.query(".load-more"):
             indicator.remove()
 
@@ -220,9 +222,12 @@ class ChatView(VerticalScroll):
                 f"[dim]── {remaining:,} more messages ──[/]",
                 classes="load-more",
             ))
+        self._loading_page = False
 
     def watch_scroll_y(self, old_value: float, new_value: float) -> None:
         """Load next page when scrolled near the bottom."""
+        if self._loading_page:
+            return
         if self._rendered_count >= len(self._filtered_messages):
             return
         # max_scroll_y may be 0 in headless tests; treat that as "at bottom"
@@ -237,6 +242,4 @@ class ChatView(VerticalScroll):
 
     def get_all_messages(self) -> list[dict]:
         """Return the current session's non-empty messages."""
-        if not self._all_messages:
-            return []
-        return [m for m in self._all_messages if not m.get("_is_empty")]
+        return list(self._all_messages)
