@@ -193,3 +193,93 @@ async def test_chat_view_empty_state_on_filter(sample_messages, sample_agent_typ
         placeholders = chat.query(".empty-state")
         assert len(placeholders) == 1
         assert "No messages match" in str(placeholders.first().content)
+
+
+async def test_chat_view_paginates_large_sessions(sample_agent_types):
+    """Only PAGE_SIZE messages are mounted initially for large sessions."""
+    messages = []
+    for i in range(250):
+        messages.append({
+            "uuid": f"msg-{i:04d}",
+            "parentUuid": None,
+            "agentId": "agent-aaa",
+            "role": "assistant",
+            "content": f"Message number {i}",
+            "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001",
+            "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        assert chat.message_count == 250
+        assert chat._rendered_count == chat.PAGE_SIZE
+
+
+async def test_chat_view_small_session_no_indicator(sample_messages, sample_agent_types):
+    """Sessions smaller than PAGE_SIZE don't show a load-more indicator."""
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        indicators = chat.query(".load-more")
+        assert len(indicators) == 0
+
+
+async def test_chat_view_large_session_shows_indicator(sample_agent_types):
+    """Sessions larger than PAGE_SIZE show a load-more indicator."""
+    messages = []
+    for i in range(150):
+        messages.append({
+            "uuid": f"msg-{i:04d}",
+            "parentUuid": None,
+            "agentId": "agent-aaa",
+            "role": "assistant",
+            "content": f"Message number {i}",
+            "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001",
+            "agentType": "web-search-researcher",
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        indicators = chat.query(".load-more")
+        assert len(indicators) == 1
+
+
+async def test_chat_view_filter_resets_pagination(sample_agent_types):
+    """Applying a filter resets to the first page."""
+    messages = []
+    for i in range(200):
+        agent_type = "web-search-researcher" if i % 2 == 0 else "general-purpose"
+        messages.append({
+            "uuid": f"msg-{i:04d}",
+            "parentUuid": None,
+            "agentId": f"agent-{agent_type[:3]}",
+            "role": "assistant",
+            "content": f"Message number {i}",
+            "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001",
+            "agentType": agent_type,
+            "teamName": "Test",
+        })
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        assert chat._rendered_count == chat.PAGE_SIZE
+        chat.apply_filters(agent_filter={"web-search-researcher"})
+        await pilot.pause()
+        assert chat.message_count == 100
+        assert chat._rendered_count == chat.PAGE_SIZE
