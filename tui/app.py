@@ -139,6 +139,10 @@ class AgentBoardApp(App):
 
     def _rebuild_after_refresh(self) -> None:
         """Reload data from disk and rebuild the UI after preprocessing."""
+        # Save state to restore after rebuild
+        prev_session_id = self._current_session_node.session_id if self._current_session_node else None
+        prev_detail_visible = self.query_one(DetailPane).is_visible
+
         index_data = load_index(self._data_dir)
         self._agent_types = load_agent_types(self._data_dir)
         self._current_session_node = None
@@ -149,6 +153,13 @@ class AgentBoardApp(App):
         self.query_one(ChatView).clear_meeting()
         self.query_one(DetailPane).hide()
         self.query_one(DetailPane).update_message(None)
+
+        # Restore previous session if it still exists
+        if prev_session_id:
+            found = self.query_one(NavTree).select_session(prev_session_id)
+            if found and prev_detail_visible:
+                self.query_one(DetailPane).show()
+
         self.notify("Data refreshed")
 
     def action_show_search(self) -> None:

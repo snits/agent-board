@@ -9,6 +9,7 @@ from tui.app import AgentBoardApp
 from tui.widgets.nav_tree import NavTree, SessionNode
 from tui.widgets.chat_view import ChatView
 from tui.widgets.agent_bar import AgentBar
+from tui.widgets.detail_pane import DetailPane
 
 
 async def test_refresh_binding_exists(data_dir):
@@ -83,8 +84,8 @@ async def test_rebuild_after_refresh_reloads_data(data_dir):
         assert "web-search-researcher" not in app._agent_types
 
 
-async def test_rebuild_after_refresh_clears_session(data_dir):
-    """_rebuild_after_refresh clears current session selection."""
+async def test_rebuild_after_refresh_preserves_session(data_dir):
+    """_rebuild_after_refresh re-selects the previous session if it still exists."""
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test() as pilot:
         tree = app.query_one(NavTree)
@@ -95,11 +96,13 @@ async def test_rebuild_after_refresh_clears_session(data_dir):
         tree.select_node(session_node)
         await pilot.pause()
         assert app._current_session_node is not None
+        original_id = app._current_session_node.session_id
 
         app._rebuild_after_refresh()
         await pilot.pause()
 
-        assert app._current_session_node is None
+        assert app._current_session_node is not None
+        assert app._current_session_node.session_id == original_id
 
 
 async def test_rebuild_after_refresh_rebuilds_nav_tree(data_dir, sample_index):
@@ -118,3 +121,79 @@ async def test_rebuild_after_refresh_rebuilds_nav_tree(data_dir, sample_index):
 
         tree = app.query_one(NavTree)
         assert len(tree.root.children) == 1
+
+
+async def test_rebuild_preserves_session_selection(data_dir):
+    """After rebuild, the previously selected session is re-selected."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+
+        # Select a session
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+        assert app._current_session_node is not None
+        original_id = app._current_session_node.session_id
+
+        # Rebuild (simulates refresh)
+        app._rebuild_after_refresh()
+        await pilot.pause()
+
+        # Session should be re-selected
+        assert app._current_session_node is not None
+        assert app._current_session_node.session_id == original_id
+        assert chat.message_count > 0
+
+
+async def test_rebuild_preserves_detail_pane_visibility(data_dir):
+    """After rebuild, the detail pane remains visible if it was open."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test(size=(80, 40)) as pilot:
+        pane = app.query_one(DetailPane)
+        tree = app.query_one(NavTree)
+
+        # Select a session and open detail pane
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+        await pilot.press("v")
+        await pilot.pause()
+        assert pane.is_visible
+
+        # Rebuild
+        app._rebuild_after_refresh()
+        await pilot.pause()
+
+        # Detail pane should still be visible
+        assert pane.is_visible
+
+
+async def test_rebuild_handles_removed_session(data_dir, sample_index):
+    """When the selected session is removed from index, rebuild shows empty state."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        chat = app.query_one(ChatView)
+
+        # Select a session
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+        assert app._current_session_node is not None
+
+        # Remove that session's project from the index
+        modified_index = {"projects": [sample_index["projects"][1]]}
+        (data_dir / "index.json").write_text(json.dumps(modified_index))
+
+        # Rebuild — should handle missing session gracefully
+        app._rebuild_after_refresh()
+        await pilot.pause()
+
+        # No session selected, chat empty
+        assert app._current_session_node is None
+        assert chat.message_count == 0

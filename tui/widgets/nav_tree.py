@@ -91,6 +91,16 @@ class NavTree(Tree):
         self.clear()
         self._populate_from_index(index_data)
 
+    def select_session(self, session_id: str) -> bool:
+        """Find and select a session node by ID. Returns True if found."""
+        for project_node in self.root.children:
+            for session_node in project_node.children:
+                if isinstance(session_node.data, SessionNode) and session_node.data.session_id == session_id:
+                    project_node.expand()
+                    self.select_node(session_node)
+                    return True
+        return False
+
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle node selection — post SessionSelected for session nodes."""
         if isinstance(event.node.data, SessionNode):
