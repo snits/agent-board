@@ -100,6 +100,7 @@ async def test_rebuild_after_refresh_preserves_session(data_dir):
 
         app._rebuild_after_refresh()
         await pilot.pause()
+        await pilot.pause()
 
         assert app._current_session_node is not None
         assert app._current_session_node.session_id == original_id
@@ -140,6 +141,7 @@ async def test_rebuild_preserves_session_selection(data_dir):
 
         # Rebuild (simulates refresh)
         app._rebuild_after_refresh()
+        await pilot.pause()
         await pilot.pause()
 
         # Session should be re-selected
