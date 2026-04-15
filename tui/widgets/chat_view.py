@@ -4,6 +4,7 @@
 from rich.markup import escape
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import OptionList
@@ -86,10 +87,6 @@ def _build_rows(
     messages: list[dict], agent_types: dict
 ) -> list[tuple[str, str, int]]:
     """Convert filtered messages into a flat list of (markup, css_class, msg_index) rows."""
-    # msg-alt alternating-shade styling was dropped during the OptionList refactor:
-    # OptionList renders each Option through a shared component class, and theme-aware
-    # per-row backgrounds can't be expressed via Rich markup. The visual nicety isn't
-    # worth the complexity.
     rows: list[tuple[str, str, int]] = []
     prev_agent = None
 
@@ -224,7 +221,7 @@ class ChatView(Widget):
     def _option_list(self) -> OptionList | None:
         try:
             return self.query_one("#chat-options", OptionList)
-        except Exception:
+        except NoMatches:
             return None
 
     def clear_meeting(self) -> None:
