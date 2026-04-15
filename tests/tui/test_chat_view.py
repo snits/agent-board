@@ -337,9 +337,11 @@ async def test_chat_view_page_down_advances_highlight(sample_agent_types):
         chat.focus()
         await pilot.pause()
         ol = _option_list(chat)
+        assert ol.highlighted is not None
         start = ol.highlighted
         await pilot.press("pagedown")
         await pilot.pause()
+        assert ol.highlighted is not None
         assert ol.highlighted > start
 
 
@@ -355,6 +357,7 @@ async def test_chat_view_filter_resets_highlight(sample_agent_types):
         await pilot.press("pagedown")
         await pilot.pause()
         ol = _option_list(chat)
+        assert ol.highlighted is not None
         assert ol.highlighted > 0
         chat.apply_filters(search_query="Message 5")
         await pilot.pause()
