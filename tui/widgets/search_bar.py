@@ -16,6 +16,7 @@ class SearchBar(Input):
         height: 1;
         border: none;
         padding: 0 1;
+        background: $boost;
     }
     SearchBar.-visible {
         display: block;
@@ -32,7 +33,7 @@ class SearchBar(Input):
             self.query = query
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(placeholder="Search messages...", **kwargs)
+        super().__init__(placeholder="Search messages… (Esc to close)", **kwargs)
         self._debounce_timer: Timer | None = None
 
     def _cancel_debounce(self) -> None:
@@ -49,7 +50,7 @@ class SearchBar(Input):
     def show(self) -> None:
         """Show the search bar and focus it."""
         self.add_class("-visible")
-        self.focus()
+        self.call_after_refresh(self.focus)
 
     def dismiss(self) -> None:
         """Hide the search bar but keep the current query active."""

@@ -279,6 +279,67 @@ async def test_escape_clears_dismissed_search(data_dir):
         assert chat.message_count == full_count
 
 
+async def test_search_indicator_in_agent_bar(data_dir):
+    """AgentBar shows active search query when search is applied."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        bar = app.query_one(AgentBar)
+        search = app.query_one(SearchBar)
+
+        # Load a session
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+
+        # Search for something
+        await pilot.press("slash")
+        await pilot.pause()
+        search.value = "Textual"
+        await pilot.pause()
+        await asyncio.sleep(0.5)
+        await pilot.pause()
+
+        # Dismiss search bar with Enter
+        await pilot.press("enter")
+        await pilot.pause()
+        assert not search.has_class("-visible")
+        assert "Search:" in str(bar._markup)
+        assert "Textual" in str(bar._markup)
+
+
+async def test_search_indicator_clears_on_escape(data_dir):
+    """AgentBar search indicator clears when search is dismissed via Escape."""
+    app = AgentBoardApp(data_dir=data_dir)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        bar = app.query_one(AgentBar)
+        search = app.query_one(SearchBar)
+
+        # Load a session
+        project_node = tree.root.children[0]
+        session_node = project_node.children[0]
+        tree.select_node(session_node)
+        await pilot.pause()
+
+        # Search and dismiss
+        await pilot.press("slash")
+        await pilot.pause()
+        search.value = "Textual"
+        await pilot.pause()
+        await asyncio.sleep(0.5)
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "Search:" in str(bar._markup)
+
+        # Escape should clear the search
+        await pilot.press("escape")
+        await pilot.pause()
+        assert "Search:" not in str(bar._markup)
+
+
 async def test_filter_cycle_shows_position(data_dir):
     """Cycling filters with 'f' shows position indicator like [1/N]."""
     app = AgentBoardApp(data_dir=data_dir)

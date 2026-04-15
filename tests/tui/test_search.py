@@ -67,6 +67,46 @@ def test_filter_by_agents_empty_filter_returns_all():
     assert len(result) == 2
 
 
+async def test_search_bar_placeholder_hints_escape():
+    """Placeholder text tells the user how to dismiss the search bar."""
+    app = SearchBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        assert "esc" in bar.placeholder.lower()
+
+
+async def test_search_bar_has_distinct_background():
+    """Search bar background differs from the default Input background for visibility."""
+    from textual.widgets import Input
+
+    class ComparisonApp(App):
+        def compose(self) -> ComposeResult:
+            yield SearchBar(id="search")
+            yield Input(id="plain")
+
+    app = ComparisonApp()
+    async with app.run_test() as pilot:
+        search = app.query_one("#search", SearchBar)
+        plain = app.query_one("#plain", Input)
+        search.add_class("-visible")
+        await pilot.pause()
+        search_bg = search.styles.background
+        plain_bg = plain.styles.background
+        assert search_bg != plain_bg, (
+            f"SearchBar background ({search_bg}) should differ from plain Input ({plain_bg})"
+        )
+
+
+async def test_search_bar_receives_focus_after_show():
+    """Search bar receives focus after show(), proving layout completed before focus."""
+    app = SearchBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        assert bar.has_focus
+
+
 async def test_search_bar_starts_hidden():
     app = SearchBarApp()
     async with app.run_test() as pilot:
