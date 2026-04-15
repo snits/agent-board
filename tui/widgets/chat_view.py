@@ -2,11 +2,25 @@
 # ABOUTME: Wraps Textual's OptionList to render headers, content lines, and tool summaries.
 
 from rich.markup import escape
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import OptionList
 from textual.widgets.option_list import Option
+
+
+def _single_line(markup: str) -> Text:
+    """Render markup as a Rich Text forced onto a single terminal line.
+
+    OptionList scroll math tracks options by index but renders per terminal
+    line, so any option whose content wraps across multiple lines causes the
+    highlight to drift from the scroll offset. Ellipsizing excess content
+    keeps every option exactly one line tall.
+    """
+    text = Text.from_markup(markup, overflow="ellipsis")
+    text.no_wrap = True
+    return text
 
 
 def is_empty_message(msg: dict) -> bool:
@@ -265,7 +279,10 @@ class ChatView(Widget):
         option_list = self._option_list
         if option_list is None:
             return
-        options = [Option(markup, id=str(i)) for i, (markup, _cls, _idx) in enumerate(rows)]
+        options = [
+            Option(_single_line(markup), id=str(i))
+            for i, (markup, _cls, _idx) in enumerate(rows)
+        ]
         option_list.clear_options()
         option_list.add_options(options)
         if options:
@@ -278,7 +295,7 @@ class ChatView(Widget):
         if option_list is None:
             return
         option_list.clear_options()
-        option_list.add_option(Option(f"[dim]{text}[/]", disabled=True))
+        option_list.add_option(Option(_single_line(f"[dim]{text}[/]"), disabled=True))
 
     def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted

@@ -108,15 +108,20 @@ async def test_chat_view_apply_search_filter(sample_messages, sample_agent_types
 
 
 async def test_chat_view_user_messages_rendered(sample_messages, sample_agent_types):
-    """User messages have their content emitted with dim markup."""
+    """User messages have their content rendered with dim styling."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
-        prompts = [str(opt.prompt) for opt in _option_list(chat).options]
-        # At least one option carries dim markup (from a user-role content line)
-        assert any("[dim]" in p for p in prompts)
+        prompts = [opt.prompt for opt in _option_list(chat).options]
+        # At least one option's Rich Text carries a dim style span (from a user-role content line).
+        # Prompts are wrapped via Text.from_markup so styling is in spans, not literal "[dim]".
+        has_dim = any(
+            any("dim" in str(span.style) for span in getattr(p, "spans", []))
+            for p in prompts
+        )
+        assert has_dim
 
 
 async def test_chat_view_empty_state_on_launch():
