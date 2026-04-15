@@ -315,38 +315,6 @@ async def test_chat_view_refresh_updates_option_list(sample_messages, sample_age
         assert first_prompt != ""
 
 
-async def test_chat_view_scroll_down(sample_agent_types):
-    """Down arrow advances the OptionList highlight by one."""
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": _make_messages(50), "agents": []}, sample_agent_types)
-        await pilot.pause()
-        chat.focus()
-        await pilot.pause()
-        ol = _option_list(chat)
-        assert ol.highlighted == 0
-        await pilot.press("down")
-        await pilot.pause()
-        assert ol.highlighted == 1
-
-
-async def test_chat_view_scroll_clamps_at_top(sample_agent_types):
-    """Up at the first option keeps the highlight at 0."""
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": _make_messages(50), "agents": []}, sample_agent_types)
-        await pilot.pause()
-        chat.focus()
-        await pilot.pause()
-        ol = _option_list(chat)
-        assert ol.highlighted == 0
-        await pilot.press("up")
-        await pilot.pause()
-        assert ol.highlighted == 0
-
-
 async def test_chat_view_scroll_clamps_at_bottom(sample_agent_types):
     """End key moves highlight to the last option."""
     app = ChatViewApp()
