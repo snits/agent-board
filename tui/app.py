@@ -206,6 +206,9 @@ class AgentBoardApp(App):
 
     def _apply_filters(self) -> None:
         """Re-render chat view with current search and agent filters."""
+        # Update search indicator in agent bar
+        self.query_one(AgentBar).set_search(self._search_query)
+
         # Update filter indicator in agent bar
         if self._agent_filter:
             current = next(iter(self._agent_filter))

@@ -99,3 +99,34 @@ async def test_agent_bar_clear_filter(sample_agent_types):
         await pilot.pause()
         assert bar._filter_type is None
         assert "Filter:" not in str(bar._markup)
+
+
+async def test_agent_bar_shows_search_query(sample_agent_types):
+    """Setting a search query shows 'Search:' indicator in the bar."""
+    app = AgentBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(AgentBar)
+        agents = [
+            {"agentId": "a1", "type": "web-search-researcher", "messageCount": 5},
+        ]
+        bar.update_meeting(agents, sample_agent_types, ["proj", "sess"])
+        bar.set_search("textual")
+        await pilot.pause()
+        assert "Search:" in str(bar._markup)
+        assert "textual" in str(bar._markup)
+
+
+async def test_agent_bar_clear_search(sample_agent_types):
+    """Clearing the search query removes the indicator."""
+    app = AgentBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(AgentBar)
+        agents = [
+            {"agentId": "a1", "type": "web-search-researcher", "messageCount": 5},
+        ]
+        bar.update_meeting(agents, sample_agent_types, ["proj", "sess"])
+        bar.set_search("textual")
+        await pilot.pause()
+        bar.set_search("")
+        await pilot.pause()
+        assert "Search:" not in str(bar._markup)

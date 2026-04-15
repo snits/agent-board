@@ -25,6 +25,7 @@ class AgentBar(Static):
         self._filter_type: str | None = None
         self._filter_position: int | None = None
         self._filter_total: int | None = None
+        self._search_query: str = ""
         self._markup: str = ""
 
     def update_meeting(
@@ -51,6 +52,11 @@ class AgentBar(Static):
         self._filter_total = total
         self._refresh_content()
 
+    def set_search(self, query: str) -> None:
+        """Set or clear the active search query indicator."""
+        self._search_query = query
+        self._refresh_content()
+
     def clear(self) -> None:
         """Clear the bar."""
         self.agents = []
@@ -59,11 +65,12 @@ class AgentBar(Static):
         self._filter_type = None
         self._filter_position = None
         self._filter_total = None
+        self._search_query = ""
         self._refresh_content()
 
     def _refresh_content(self) -> None:
         """Rebuild the displayed markup."""
-        if not self.agents and not self.breadcrumb_parts and not self._filter_type:
+        if not self.agents and not self.breadcrumb_parts and not self._filter_type and not self._search_query:
             self._markup = ""
             self.update("")
             return
@@ -90,11 +97,18 @@ class AgentBar(Static):
                 pos_info = f" [{self._filter_position}/{self._filter_total}]"
             filter_text = f"[bold yellow]Filter: {filter_label}{pos_info}[/]"
 
+        # Build search indicator
+        search_text = ""
+        if self._search_query:
+            search_text = f"[bold cyan]Search: {self._search_query}[/]"
+
         sections = []
         if roster:
             sections.append(roster)
         if filter_text:
             sections.append(filter_text)
+        if search_text:
+            sections.append(search_text)
         if breadcrumb:
             sections.append(f"[dim]{breadcrumb}[/]")
 
