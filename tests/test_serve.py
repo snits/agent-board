@@ -1,8 +1,10 @@
-# ABOUTME: Tests for the web server's data directory routing.
+# ABOUTME: Tests for the web server's data directory routing and refresh endpoint.
 # ABOUTME: Validates that /data/ URL paths map to the XDG data directory safely.
 
 import io
+import json
 from pathlib import Path
+from unittest.mock import patch
 
 from serve import Handler
 
@@ -96,3 +98,58 @@ def test_translate_path_blocks_sibling_prefix_collision(tmp_path):
     assert resolved.is_relative_to(data_dir.resolve()), (
         f"Sibling prefix collision escaped data dir: {resolved}"
     )
+
+
+def _make_post_handler(data_dir: Path, source_dir: Path, archive_dir: Path, path: str) -> tuple:
+    """Create a Handler wired for POST testing, returning (handler, response_buffer)."""
+    handler = _make_handler(data_dir)
+    handler.source_dir = source_dir
+    handler.archive_dir = archive_dir
+    handler.path = path
+    handler.headers = {"Content-Length": "0"}
+    handler.rfile = io.BytesIO(b"")
+    handler.request_version = "HTTP/1.1"
+    handler.requestline = f"POST {path} HTTP/1.1"
+    handler.client_address = ("127.0.0.1", 0)
+    response_buffer = io.BytesIO()
+    handler.wfile = response_buffer
+    return handler, response_buffer
+
+
+def test_refresh_endpoint_calls_preprocess(tmp_path):
+    """POST /api/refresh runs the preprocessor and returns success."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    archive_dir = tmp_path / "archive"
+
+    handler, response_buffer = _make_post_handler(data_dir, source_dir, archive_dir, "/api/refresh")
+
+    with patch("serve.run_preprocess") as mock_preprocess:
+        handler.do_POST()
+        mock_preprocess.assert_called_once_with(source_dir, data_dir, archive_dir=archive_dir)
+
+    response_buffer.seek(0)
+    raw = response_buffer.read().decode()
+    assert "200" in raw
+    assert '"ok"' in raw
+
+
+def test_refresh_endpoint_returns_500_on_error(tmp_path):
+    """POST /api/refresh returns 500 when preprocessing fails."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    archive_dir = tmp_path / "archive"
+
+    handler, response_buffer = _make_post_handler(data_dir, source_dir, archive_dir, "/api/refresh")
+
+    with patch("serve.run_preprocess", side_effect=RuntimeError("boom")):
+        handler.do_POST()
+
+    response_buffer.seek(0)
+    raw = response_buffer.read().decode()
+    assert "500" in raw
+    assert "boom" in raw

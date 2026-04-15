@@ -3,6 +3,7 @@
 
 import argparse
 import http.server
+import json
 import socketserver
 from pathlib import Path
 
@@ -15,6 +16,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     """Serves frontend from project root and /data/ from the XDG data directory."""
 
     data_dir: Path = Path("data")
+    source_dir: Path = Path(".")
+    archive_dir: Path = Path(".")
 
     def __init__(self, *args, directory=None, **kwargs):
         super().__init__(*args, directory=directory, **kwargs)
@@ -26,6 +29,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/api/refresh":
+            try:
+                run_preprocess(self.source_dir, self.data_dir, archive_dir=self.archive_dir)
+                body = json.dumps({"status": "ok"}).encode()
+                self.send_response(200)
+            except Exception as e:
+                body = json.dumps({"error": str(e)}).encode()
+                self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_error(404)
 
     def translate_path(self, path):
         """Route /data/ requests to the XDG data directory."""
@@ -74,6 +93,8 @@ def main():
     project_root = str(Path(__file__).parent)
     socketserver.TCPServer.allow_reuse_address = True
     Handler.data_dir = args.output.resolve()
+    Handler.source_dir = args.source.resolve()
+    Handler.archive_dir = default_archive_dir().resolve()
 
     with socketserver.TCPServer(("", args.port), lambda *a, **kw: Handler(*a, directory=project_root, **kw)) as httpd:
         print(f"Agent Board running at http://localhost:{args.port}/frontend/")

@@ -29,6 +29,7 @@
   const toggleRoster = $('#toggle-roster');
   const closeRoster = $('#close-roster');
   const toggleSidebar = $('#toggle-sidebar');
+  const refreshBtn = $('#refresh-data');
   const renderProgress = $('#render-progress');
   const progressFill = $('#progress-fill');
   const progressText = $('#progress-text');
@@ -66,6 +67,8 @@
       state.sidebarCollapsed = !state.sidebarCollapsed;
       app.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
     });
+
+    refreshBtn.addEventListener('click', refreshData);
 
     let searchDebounce = null;
     searchInput.addEventListener('input', () => {
@@ -434,6 +437,41 @@
 
   function hideProgress() {
     renderProgress.classList.add('hidden');
+  }
+
+  // ── Refresh ────────────────────────────────────────────
+  async function refreshData() {
+    refreshBtn.disabled = true;
+    refreshBtn.classList.add('refreshing');
+    try {
+      const resp = await fetch('/api/refresh', { method: 'POST' });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${resp.status}`);
+      }
+      // Reload index and agent types
+      const [indexData, typesData] = await Promise.all([
+        fetchJSON('/data/index.json'),
+        fetchJSON('/data/agent-types.json'),
+      ]);
+      state.index = indexData;
+      state.agentTypes = typesData;
+      state.sessionCache = {};
+      renderSidebar();
+
+      // Reload current session if one is selected
+      if (state.currentSessionId) {
+        const activeEl = document.querySelector('.tree-session.active');
+        if (activeEl) {
+          activeEl.click();
+        }
+      }
+    } catch (err) {
+      showError('Refresh failed: ' + err.message);
+    } finally {
+      refreshBtn.disabled = false;
+      refreshBtn.classList.remove('refreshing');
+    }
   }
 
   // ── Utilities ──────────────────────────────────────────

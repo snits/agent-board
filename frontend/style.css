@@ -340,6 +340,18 @@ html, body {
   border-color: var(--border-accent);
 }
 
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.icon-btn.refreshing {
+  animation: spin 800ms linear infinite;
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
 #search-input {
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
