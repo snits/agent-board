@@ -71,7 +71,7 @@ class AgentBoardApp(App):
             with Vertical(id="chat-column"):
                 yield ChatView(id="chat-view")
                 yield DetailPane(agent_types=self._agent_types, id="detail-pane")
-        yield SearchBar(id="search-bar")
+                yield SearchBar(id="search-bar")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -149,17 +149,18 @@ class AgentBoardApp(App):
         self.query_one(SearchBar).show()
 
     def action_escape(self) -> None:
-        """Handle Escape — step focus back from detail pane, hide search, or clear filters."""
-        pane = self.query_one(DetailPane)
-        if pane.has_focus_within:
-            self.query_one(ChatView).focus()
-            return
+        """Handle Escape — hide search, clear query, clear filters, then step focus back."""
         search = self.query_one(SearchBar)
         if search.has_class("-visible"):
             search.clear()
+            self.query_one(ChatView).focus()
             return
         if self._search_query:
             search.clear()
+            return
+        pane = self.query_one(DetailPane)
+        if pane.has_focus_within:
+            self.query_one(ChatView).focus()
             return
         if self._agent_filter:
             self._agent_filter.clear()
