@@ -85,9 +85,9 @@ def _precompute_messages(messages: list[dict]) -> None:
 
 def _build_rows(
     messages: list[dict], agent_types: dict
-) -> list[tuple[str, str, int]]:
-    """Convert filtered messages into a flat list of (markup, css_class, msg_index) rows."""
-    rows: list[tuple[str, str, int]] = []
+) -> list[tuple[str, int]]:
+    """Convert filtered messages into a flat list of (markup, msg_index) rows."""
+    rows: list[tuple[str, int]] = []
     prev_agent = None
 
     for msg_idx, msg in enumerate(messages):
@@ -104,7 +104,7 @@ def _build_rows(
             dim_open = "[dim]" if role == "user" else ""
             dim_close = "[/dim]" if role == "user" else ""
             header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-            rows.append((header, "msg-header", msg_idx))
+            rows.append((header, msg_idx))
             prev_agent = agent_id
 
         content = msg.get("content", "")
@@ -116,12 +116,12 @@ def _build_rows(
                 first_line = first_line + "…"
             escaped = escape(first_line)
             if role == "user":
-                rows.append((f"[dim]{escaped}[/dim]", "msg-content msg-user", msg_idx))
+                rows.append((f"[dim]{escaped}[/dim]", msg_idx))
             else:
-                rows.append((escaped, "msg-content", msg_idx))
+                rows.append((escaped, msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{escape(summary)}[/]", "tool-summary", msg_idx))
+            rows.append((f"[dim]{escape(summary)}[/]", msg_idx))
 
     return rows
 
@@ -272,13 +272,13 @@ class ChatView(Widget):
             self._show_empty_hint(hint)
             return
 
-        self._row_msg_idx = [r[2] for r in rows]
+        self._row_msg_idx = [r[1] for r in rows]
         option_list = self._option_list
         if option_list is None:
             return
         options = [
             Option(_single_line(markup), id=str(i))
-            for i, (markup, _cls, _idx) in enumerate(rows)
+            for i, (markup, _idx) in enumerate(rows)
         ]
         option_list.clear_options()
         option_list.add_options(options)
