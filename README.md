@@ -126,3 +126,7 @@ Generated output is written to `~/.local/share/agent-board/` by default (XDG-com
 ```bash
 .venv/bin/python -m pytest tests/ -v
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

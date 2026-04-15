@@ -2,10 +2,18 @@
 name = "agent-board"
 version = "0.1.0"
 description = "Viewer for Claude Code agent team transcripts"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["claude-code", "agent", "transcript", "viewer", "tui"]
 requires-python = ">=3.12"
 dependencies = [
     "textual>=1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/snits/agent-board"
+Repository = "https://github.com/snits/agent-board"
+Issues = "https://github.com/snits/agent-board/issues"
 
 [project.scripts]
 agent-board-tui = "tui.__main__:main"
