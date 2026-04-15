@@ -97,6 +97,20 @@ async def test_search_bar_has_distinct_background():
         )
 
 
+async def test_search_bar_has_no_border():
+    """Search bar must have no border so text renders in the single row."""
+    app = SearchBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(SearchBar)
+        bar.show()
+        await pilot.pause()
+        # Verify no border on any edge (border would steal rows from height: 1)
+        border_top = bar.styles.border_top
+        border_bottom = bar.styles.border_bottom
+        assert border_top[0] == "" or border_top[0] == "none", f"Unexpected top border: {border_top}"
+        assert border_bottom[0] == "" or border_bottom[0] == "none", f"Unexpected bottom border: {border_bottom}"
+
+
 async def test_search_bar_receives_focus_after_show():
     """Search bar receives focus after show(), proving layout completed before focus."""
     app = SearchBarApp()
