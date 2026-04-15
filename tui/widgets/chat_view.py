@@ -1,11 +1,12 @@
 # ABOUTME: Chat view widget for displaying grouped agent message streams.
-# ABOUTME: Renders tool use summaries and supports agent grouping via a virtual-scroll widget pool.
+# ABOUTME: Wraps Textual's OptionList to render headers, content lines, and tool summaries.
 
 from rich.markup import escape
-from textual.events import Key, Resize
+from textual.app import ComposeResult
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Static
+from textual.widgets import OptionList
+from textual.widgets.option_list import Option
 
 
 def is_empty_message(msg: dict) -> bool:
@@ -71,6 +72,10 @@ def _build_rows(
     messages: list[dict], agent_types: dict
 ) -> list[tuple[str, str, int]]:
     """Convert filtered messages into a flat list of (markup, css_class, msg_index) rows."""
+    # msg-alt alternating-shade styling was dropped during the OptionList refactor:
+    # OptionList renders each Option through a shared component class, and theme-aware
+    # per-row backgrounds can't be expressed via Rich markup. The visual nicety isn't
+    # worth the complexity.
     rows: list[tuple[str, str, int]] = []
     prev_agent = None
 
@@ -84,13 +89,11 @@ def _build_rows(
         color = type_info.get("color", "#888888")
         label = type_info.get("label", agent_type)
 
-        alt = " msg-alt" if msg_idx % 2 == 1 else ""
-
         if agent_id != prev_agent:
             dim_open = "[dim]" if role == "user" else ""
             dim_close = "[/dim]" if role == "user" else ""
             header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-            rows.append((header, f"msg-header{alt}", msg_idx))
+            rows.append((header, "msg-header", msg_idx))
             prev_agent = agent_id
 
         content = msg.get("content", "")
@@ -100,17 +103,38 @@ def _build_rows(
                 first_line = first_line[:117] + "…"
             elif "\n" in content:
                 first_line = first_line + "…"
-            css_class = "msg-content msg-user" if role == "user" else "msg-content"
-            rows.append((escape(first_line), f"{css_class}{alt}", msg_idx))
+            escaped = escape(first_line)
+            if role == "user":
+                rows.append((f"[dim]{escaped}[/dim]", "msg-content msg-user", msg_idx))
+            else:
+                rows.append((escaped, "msg-content", msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{escape(summary)}[/]", f"tool-summary{alt}", msg_idx))
+            rows.append((f"[dim]{escape(summary)}[/]", "tool-summary", msg_idx))
 
     return rows
 
 
+class _ChatOptionList(OptionList):
+    """OptionList variant that clamps at both ends instead of wrapping."""
+
+    def action_cursor_up(self) -> None:
+        if self.highlighted is None or self.highlighted <= 0:
+            return
+        self.highlighted -= 1
+
+    def action_cursor_down(self) -> None:
+        if self.highlighted is None:
+            if self.option_count:
+                self.highlighted = 0
+            return
+        if self.highlighted >= self.option_count - 1:
+            return
+        self.highlighted += 1
+
+
 class ChatView(Widget):
-    """Virtual-scroll chat view using a fixed widget pool."""
+    """Chat view rendering grouped agent messages via an OptionList."""
 
     DEFAULT_CSS = """
     ChatView {
@@ -120,18 +144,32 @@ class ChatView(Widget):
         layout: vertical;
         overflow: hidden;
     }
-    ChatView .msg-user {
-        color: $text-muted;
+    ChatView > OptionList {
+        height: 1fr;
+        border: none;
+        padding: 0;
+        background: $surface;
     }
-    ChatView .msg-alt {
-        background: $surface-darken-1;
+    ChatView > OptionList:focus {
+        border: none;
     }
-    ChatView .cursor {
+    ChatView > OptionList > .option-list--option-highlighted {
         background: $accent-darken-1;
     }
     """
 
     can_focus = True
+
+    def allow_focus(self) -> bool:
+        """ChatView delegates focus to its inner OptionList.
+
+        ``can_focus = True`` is kept at the class level as a documented contract,
+        but Textual's focus cycling should land on the OptionList directly — it is
+        the widget that actually consumes keyboard input. Returning False here
+        keeps ChatView out of the tab-focus chain while ``chat.focus()`` still
+        routes focus to the inner list (so ``chat.has_focus_within`` becomes True).
+        """
+        return False
 
     class MessageFocused(Message):
         """Posted when cursor moves to a different message."""
@@ -147,39 +185,33 @@ class ChatView(Widget):
         self.message_count = 0
         self._all_messages: list[dict] = []
         self._filtered_messages: list[dict] = []
-        self._rows: list[tuple[str, str, int]] = []
-        self._pool: list[Static] = []
-        self._scroll_offset = 0
-        self._cursor_pos = 0
+        self._row_msg_idx: list[int] = []
         self._last_focused_msg_idx = -1
         self._meeting_data = None
         self._agent_types = {}
         self._search_query = ""
         self._agent_filter: set[str] = set()
 
+    def compose(self) -> ComposeResult:
+        yield _ChatOptionList(id="chat-options")
+
     def on_mount(self) -> None:
-        """Build the widget pool sized to the viewport."""
-        self._build_pool()
-        if not self._meeting_data:
-            self._show_empty_hint(self.EMPTY_STATE_HINT)
+        """Start in the empty state until a session is loaded."""
+        self._show_empty_hint(self.EMPTY_STATE_HINT)
 
-    def on_resize(self, event: Resize) -> None:
-        """Rebuild pool when terminal is resized."""
-        self._build_pool()
-        if self._rows:
-            self._refresh_pool()
-        elif not self._meeting_data:
-            self._show_empty_hint(self.EMPTY_STATE_HINT)
+    def focus(self, scroll_visible: bool = True):
+        """Delegate focus to the inner OptionList so keyboard navigation works."""
+        option_list = self._option_list
+        if option_list is not None:
+            option_list.focus(scroll_visible=scroll_visible)
+        return self
 
-    def _build_pool(self) -> None:
-        """Create or recreate the fixed pool of Static widgets."""
-        self.remove_children()
-        self._pool = []
-        pool_size = self.size.height
-        for _ in range(pool_size):
-            widget = Static("")
-            self.mount(widget)
-            self._pool.append(widget)
+    @property
+    def _option_list(self) -> OptionList | None:
+        try:
+            return self.query_one("#chat-options", OptionList)
+        except Exception:
+            return None
 
     def clear_meeting(self) -> None:
         """Clear the current session and show the empty state."""
@@ -187,9 +219,7 @@ class ChatView(Widget):
         self._agent_types = {}
         self._all_messages = []
         self._filtered_messages = []
-        self._rows = []
-        self._scroll_offset = 0
-        self._cursor_pos = 0
+        self._row_msg_idx = []
         self._last_focused_msg_idx = -1
         self._search_query = ""
         self._agent_filter = set()
@@ -208,13 +238,13 @@ class ChatView(Widget):
         self._apply_and_render()
 
     def apply_filters(self, search_query: str = "", agent_filter: set[str] | None = None) -> None:
-        """Apply search and agent filters, then refresh the pool."""
+        """Apply search and agent filters, then refresh the option list."""
         self._search_query = search_query
         self._agent_filter = agent_filter or set()
         self._apply_and_render()
 
     def _apply_and_render(self) -> None:
-        """Filter messages, build rows, and refresh the pool."""
+        """Filter messages, build rows, and repopulate the option list."""
         messages = self._all_messages
         if self._agent_filter:
             messages = filter_by_agents(messages, self._agent_filter)
@@ -222,87 +252,48 @@ class ChatView(Widget):
             messages = [m for m in messages if matches_search(m, self._search_query)]
         self._filtered_messages = messages
         self.message_count = len(messages)
-        self._rows = _build_rows(messages, self._agent_types)
-        self._scroll_offset = 0
-        self._cursor_pos = 0
+        rows = _build_rows(messages, self._agent_types)
         self._last_focused_msg_idx = -1
+
         if self.message_count == 0:
+            self._row_msg_idx = []
             hint = self.EMPTY_STATE_HINT if not self._all_messages else self.EMPTY_FILTER_HINT
             self._show_empty_hint(hint)
-        else:
-            self._refresh_pool()
+            return
+
+        self._row_msg_idx = [r[2] for r in rows]
+        option_list = self._option_list
+        if option_list is None:
+            return
+        options = [Option(markup, id=str(i)) for i, (markup, _cls, _idx) in enumerate(rows)]
+        option_list.clear_options()
+        option_list.add_options(options)
+        if options:
+            option_list.highlighted = 0
 
     def _show_empty_hint(self, text: str) -> None:
-        """Display a hint message using the pool."""
-        self._rows = []
-        for widget in self._pool:
-            widget.update("")
-            widget.set_classes("")
-        if self._pool:
-            mid = len(self._pool) // 3
-            self._pool[mid].update(f"[dim]{text}[/]")
-
-    def _refresh_pool(self) -> None:
-        """Update pool widget content from rows at current scroll offset."""
-        for i, widget in enumerate(self._pool):
-            row_idx = self._scroll_offset + i
-            if row_idx < len(self._rows):
-                markup, css_class, _msg_idx = self._rows[row_idx]
-                if row_idx == self._cursor_pos:
-                    css_class += " cursor"
-                widget.update(markup)
-                widget.set_classes(css_class)
-            else:
-                widget.update("")
-                widget.set_classes("")
-
-    def _clamp_offset(self) -> None:
-        """Ensure scroll offset stays within valid bounds."""
-        max_offset = max(0, len(self._rows) - len(self._pool))
-        self._scroll_offset = max(0, min(self._scroll_offset, max_offset))
-
-    def _ensure_cursor_visible(self) -> None:
-        """Adjust scroll offset so cursor row is within the visible pool."""
-        if self._cursor_pos < self._scroll_offset:
-            self._scroll_offset = self._cursor_pos
-        elif self._cursor_pos >= self._scroll_offset + len(self._pool):
-            self._scroll_offset = self._cursor_pos - len(self._pool) + 1
-        self._clamp_offset()
-
-    def _post_message_focused(self) -> None:
-        """Post MessageFocused if cursor moved to a different message."""
-        if not self._rows or self._cursor_pos >= len(self._rows):
+        """Populate the option list with a single disabled hint option."""
+        self._row_msg_idx = []
+        option_list = self._option_list
+        if option_list is None:
             return
-        _markup, _css, msg_idx = self._rows[self._cursor_pos]
-        if msg_idx != self._last_focused_msg_idx:
-            self._last_focused_msg_idx = msg_idx
-            if msg_idx < len(self._filtered_messages):
-                self.post_message(self.MessageFocused(self._filtered_messages[msg_idx]))
+        option_list.clear_options()
+        option_list.add_option(Option(f"[dim]{text}[/]", disabled=True))
 
-    def on_key(self, event: Key) -> None:
-        """Handle cursor movement keys."""
-        if not self._rows:
+    def on_option_list_option_highlighted(
+        self, event: OptionList.OptionHighlighted
+    ) -> None:
+        """Post MessageFocused when the highlighted option maps to a new source message."""
+        event.stop()
+        idx = event.option_index
+        if idx is None or idx < 0 or idx >= len(self._row_msg_idx):
             return
-        pool_size = len(self._pool)
-        if event.key == "down":
-            self._cursor_pos += 1
-        elif event.key == "up":
-            self._cursor_pos -= 1
-        elif event.key == "pagedown":
-            self._cursor_pos += pool_size
-        elif event.key == "pageup":
-            self._cursor_pos -= pool_size
-        elif event.key == "home":
-            self._cursor_pos = 0
-        elif event.key == "end":
-            self._cursor_pos = len(self._rows) - 1
-        else:
+        msg_idx = self._row_msg_idx[idx]
+        if msg_idx == self._last_focused_msg_idx:
             return
-        event.prevent_default()
-        self._cursor_pos = max(0, min(self._cursor_pos, len(self._rows) - 1))
-        self._ensure_cursor_visible()
-        self._refresh_pool()
-        self._post_message_focused()
+        self._last_focused_msg_idx = msg_idx
+        if 0 <= msg_idx < len(self._filtered_messages):
+            self.post_message(self.MessageFocused(self._filtered_messages[msg_idx]))
 
     def get_all_messages(self) -> list[dict]:
         """Return the current session's non-empty messages."""

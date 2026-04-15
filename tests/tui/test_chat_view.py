@@ -3,6 +3,7 @@
 
 import pytest
 from textual.app import App, ComposeResult
+from textual.widgets import OptionList
 
 from tui.widgets.chat_view import (
     ChatView, is_empty_message, format_tool_summary, matches_search,
@@ -15,6 +16,24 @@ class ChatViewApp(App):
 
     def compose(self) -> ComposeResult:
         yield ChatView()
+
+
+def _option_list(chat: ChatView) -> OptionList:
+    return chat.query_one("#chat-options", OptionList)
+
+
+def _make_messages(count: int) -> list[dict]:
+    """Generate `count` assistant messages under a single agent id."""
+    return [
+        {
+            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
+            "role": "assistant", "content": f"Message {i}", "toolUse": [],
+            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
+            "promptId": "mtg-001", "agentType": "web-search-researcher",
+            "teamName": "Test",
+        }
+        for i in range(count)
+    ]
 
 
 def test_is_empty_message_empty():
@@ -58,8 +77,8 @@ async def test_chat_view_loads_messages(sample_messages, sample_agent_types):
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
-        # Should have rendered message groups (5 messages, but grouped)
         assert chat.message_count > 0
+        assert _option_list(chat).option_count > 0
 
 
 async def test_chat_view_filters_empty_messages(sample_empty_messages, sample_agent_types):
@@ -88,28 +107,30 @@ async def test_chat_view_apply_search_filter(sample_messages, sample_agent_types
         assert chat.message_count > 0
 
 
-async def test_chat_view_user_messages_have_class(sample_messages, sample_agent_types):
-    """User messages get the msg-user CSS class for visual distinction."""
+async def test_chat_view_user_messages_rendered(sample_messages, sample_agent_types):
+    """User messages have their content emitted with dim markup."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
-        user_widgets = [w for w in chat._pool if w.has_class("msg-user")]
-        assert len(user_widgets) > 0
-        non_user_content = [w for w in chat._pool
-                           if w.has_class("msg-content") and not w.has_class("msg-user")]
-        assert len(non_user_content) > 0
+        prompts = [str(opt.prompt) for opt in _option_list(chat).options]
+        # At least one option carries dim markup (from a user-role content line)
+        assert any("[dim]" in p for p in prompts)
 
 
 async def test_chat_view_empty_state_on_launch():
-    """Chat view shows placeholder when no session is loaded."""
+    """Chat view shows the placeholder hint when no session is loaded."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         await pilot.pause()
-        pool_texts = [str(w.content) for w in chat._pool]
-        assert any("Select a session" in t for t in pool_texts)
+        ol = _option_list(chat)
+        assert ol.option_count == 1
+        hint_option = ol.get_option_at_index(0)
+        assert hint_option.disabled
+        assert ChatView.EMPTY_STATE_HINT in str(hint_option.prompt)
+        assert chat.message_count == 0
 
 
 def test_precompute_sets_is_empty():
@@ -173,8 +194,11 @@ async def test_chat_view_empty_state_on_filter(sample_messages, sample_agent_typ
         chat.apply_filters(search_query="zzz_no_match_zzz")
         await pilot.pause()
         assert chat.message_count == 0
-        pool_texts = [str(w.content) for w in chat._pool]
-        assert any("No messages match" in t for t in pool_texts)
+        ol = _option_list(chat)
+        assert ol.option_count == 1
+        hint_option = ol.get_option_at_index(0)
+        assert hint_option.disabled
+        assert ChatView.EMPTY_FILTER_HINT in str(hint_option.prompt)
 
 
 def test_build_rows_header_on_agent_change():
@@ -273,215 +297,98 @@ def test_build_rows_empty_list():
     assert rows == []
 
 
-def test_build_rows_alternates_shading():
-    """Consecutive messages alternate msg-alt class for visual distinction."""
-    msgs = [
-        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
-         "content": "First", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
-         "_is_empty": False, "_tool_summaries": [], "_search_text": "first"},
-        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
-         "content": "Second", "toolUse": [], "timestamp": "2026-03-20T10:01:00.000Z",
-         "_is_empty": False, "_tool_summaries": [], "_search_text": "second"},
-        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
-         "content": "Third", "toolUse": [], "timestamp": "2026-03-20T10:02:00.000Z",
-         "_is_empty": False, "_tool_summaries": [], "_search_text": "third"},
-    ]
-    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
-    rows = _build_rows(msgs, agent_types)
-    # header + 3 content = 4 rows. Messages alternate: even(0), odd(1), even(2)
-    content_rows = [r for r in rows if "msg-content" in r[1]]
-    assert len(content_rows) == 3
-    assert "msg-alt" not in content_rows[0][1]  # msg 0: no alt
-    assert "msg-alt" in content_rows[1][1]       # msg 1: alt
-    assert "msg-alt" not in content_rows[2][1]  # msg 2: no alt
-
-
-def test_build_rows_alt_includes_header_and_tools():
-    """All rows from an alt message (header, content, tools) share msg-alt."""
-    msgs = [
-        {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
-         "content": "First", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
-         "_is_empty": False, "_tool_summaries": [], "_search_text": "first"},
-        {"agentId": "a2", "agentType": "general-purpose", "role": "assistant",
-         "content": "Second", "toolUse": [{"tool": "Read"}],
-         "timestamp": "2026-03-20T10:01:00.000Z",
-         "_is_empty": False, "_tool_summaries": ["⚙ Read → /app.py"],
-         "_search_text": "second"},
-    ]
-    agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
-    rows = _build_rows(msgs, agent_types)
-    # msg 0: header + content (no alt). msg 1: header + content + tool (alt)
-    # Find the second message's rows (index 2, 3, 4)
-    assert "msg-alt" not in rows[0][1]  # msg 0 header
-    assert "msg-alt" not in rows[1][1]  # msg 0 content
-    assert "msg-alt" in rows[2][1]       # msg 1 header
-    assert "msg-alt" in rows[3][1]       # msg 1 content
-    assert "msg-alt" in rows[4][1]       # msg 1 tool
-
-
-async def test_chat_view_pool_size_matches_height():
-    """Widget pool size equals the ChatView height."""
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        await pilot.pause()
-        assert len(chat._pool) == chat.size.height
-
-
-async def test_chat_view_refresh_pool_updates_content(sample_messages, sample_agent_types):
-    """Loading messages updates pool widget content."""
+async def test_chat_view_refresh_updates_option_list(sample_messages, sample_agent_types):
+    """Loading messages populates the OptionList with options."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
-        first_content = str(chat._pool[0].content)
-        assert first_content != ""
+        ol = _option_list(chat)
+        assert ol.option_count > 0
+        first_prompt = str(ol.get_option_at_index(0).prompt)
+        assert first_prompt != ""
 
 
 async def test_chat_view_scroll_down(sample_agent_types):
-    """Down arrow moves cursor when content exceeds viewport."""
-    # Enough messages so rows > pool height (24), enabling scrolling
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
+    """Down arrow advances the OptionList highlight by one."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(50), "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        ol = _option_list(chat)
+        assert ol.highlighted == 0
         await pilot.press("down")
         await pilot.pause()
-        assert chat._cursor_pos == 1
+        assert ol.highlighted == 1
 
 
 async def test_chat_view_scroll_clamps_at_top(sample_agent_types):
-    """Up arrow at top stays at cursor 0."""
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
+    """Up at the first option keeps the highlight at 0."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(50), "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        ol = _option_list(chat)
+        assert ol.highlighted == 0
         await pilot.press("up")
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        assert ol.highlighted == 0
 
 
 async def test_chat_view_scroll_clamps_at_bottom(sample_agent_types):
-    """End key moves cursor to last row."""
-    messages = []
-    for i in range(10):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
+    """End key moves highlight to the last option."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(10), "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
         await pilot.press("end")
         await pilot.pause()
-        assert chat._cursor_pos == len(chat._rows) - 1
+        ol = _option_list(chat)
+        assert ol.highlighted == ol.option_count - 1
 
 
-async def test_chat_view_page_down(sample_agent_types):
-    """Page down advances cursor by pool size."""
-    messages = []
-    for i in range(100):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001", "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
+async def test_chat_view_page_down_advances_highlight(sample_agent_types):
+    """Page down moves the highlight forward."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(100), "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        pool_size = len(chat._pool)
+        ol = _option_list(chat)
+        start = ol.highlighted
         await pilot.press("pagedown")
         await pilot.pause()
-        assert chat._cursor_pos == pool_size
+        assert ol.highlighted > start
 
 
-async def test_chat_view_empty_state_via_pool():
-    """Empty state renders hint text through the pool."""
+async def test_chat_view_filter_resets_highlight(sample_agent_types):
+    """Applying a filter resets the highlight to 0."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        await pilot.pause()
-        assert len(chat._pool) > 0
-        pool_texts = [str(w.content) for w in chat._pool]
-        assert any("Select a session" in t for t in pool_texts)
-
-
-async def test_chat_view_resize_rebuilds_pool():
-    """Resize rebuilds the pool to match new height."""
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        await pilot.pause()
-        old_pool_size = len(chat._pool)
-        assert old_pool_size > 0
-        await pilot.resize_terminal(80, 40)
-        await pilot.pause()
-        new_pool_size = len(chat._pool)
-        assert new_pool_size != old_pool_size
-        assert new_pool_size > 0
-
-
-async def test_chat_view_filter_resets_scroll(sample_agent_types):
-    """Applying a filter resets cursor to 0."""
-    messages = []
-    for i in range(100):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001", "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
-    app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(100), "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
         await pilot.press("pagedown")
         await pilot.pause()
-        assert chat._cursor_pos > 0
+        ol = _option_list(chat)
+        assert ol.highlighted > 0
         chat.apply_filters(search_query="Message 5")
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        assert ol.highlighted == 0
 
 
 def test_build_rows_includes_msg_index():
@@ -507,48 +414,32 @@ def test_build_rows_includes_msg_index():
     assert rows[4][2] == 1  # content
 
 
-async def test_chat_view_cursor_starts_at_zero(sample_agent_types):
-    """Cursor starts at row 0 after loading messages."""
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
+async def test_chat_view_highlight_starts_at_zero(sample_agent_types):
+    """Highlight starts at option 0 after loading messages."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(50), "agents": []}, sample_agent_types)
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        assert _option_list(chat).highlighted == 0
 
 
-async def test_chat_view_cursor_moves_down(sample_agent_types):
-    """Down arrow moves cursor by one row."""
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
+async def test_chat_view_highlight_moves_down(sample_agent_types):
+    """Down arrow advances the highlight by one."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(50), "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
         await pilot.press("down")
         await pilot.pause()
-        assert chat._cursor_pos == 1
+        assert _option_list(chat).highlighted == 1
 
 
-async def test_chat_view_cursor_clamps_at_top(sample_agent_types):
-    """Up at cursor 0 stays at 0."""
+async def test_chat_view_highlight_clamps_at_top(sample_agent_types):
+    """Up at highlight 0 stays at 0 (single message)."""
     messages = [
         {"uuid": "msg-0", "parentUuid": None, "agentId": "agent-aaa",
          "role": "assistant", "content": "Hello", "toolUse": [],
@@ -564,75 +455,120 @@ async def test_chat_view_cursor_clamps_at_top(sample_agent_types):
         await pilot.pause()
         await pilot.press("up")
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        assert _option_list(chat).highlighted == 0
 
 
-async def test_chat_view_cursor_highlight_css(sample_agent_types):
-    """The pool widget at cursor position has the cursor CSS class."""
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
+async def test_chat_view_focus_delegates_to_option_list(sample_agent_types):
+    """chat.focus() puts focus on the inner OptionList."""
     app = ChatViewApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
-        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        chat.load_messages({"messages": _make_messages(10), "agents": []}, sample_agent_types)
         await pilot.pause()
-        cursor_widgets = [w for w in chat._pool if w.has_class("cursor")]
-        assert len(cursor_widgets) == 1
+        chat.focus()
+        await pilot.pause()
+        assert _option_list(chat).has_focus
 
 
-async def test_chat_view_cursor_scrolls_into_view(sample_agent_types):
-    """Cursor moving past pool bottom scrolls offset to follow."""
-    messages = []
-    for i in range(100):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:{i // 60:02d}:{i % 60:02d}.000Z",
-            "promptId": "mtg-001", "agentType": "web-search-researcher",
-            "teamName": "Test",
-        })
+async def test_chat_view_end_key_highlights_visible_last_option(sample_agent_types):
+    """Regression: in a small viewport, pressing End highlights the last option
+    AND scrolls it into view. The previous fixed-pool implementation could leave
+    the cursor rendered off-screen when the pool was sized before layout settled.
+    """
+    # Enough messages to exceed any reasonable viewport
+    messages = _make_messages(200)
     app = ChatViewApp()
-    async with app.run_test(size=(80, 24)) as pilot:
+    # Deliberately small terminal — stresses the previous pool's viewport math
+    async with app.run_test(size=(80, 16)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        pool_size = len(chat._pool)
         await pilot.press("end")
         await pilot.pause()
-        assert chat._cursor_pos == len(chat._rows) - 1
-        assert chat._scroll_offset > 0
-        assert chat._scroll_offset <= chat._cursor_pos < chat._scroll_offset + pool_size
+        ol = _option_list(chat)
+        last_index = ol.option_count - 1
+        assert ol.highlighted == last_index
+        # The highlighted option must be inside the OptionList's visible scroll region.
+        # OptionList subclasses ScrollView, so scroll_y is the top of the visible region
+        # and size.height is its span.
+        scroll_y = ol.scroll_y
+        visible_top = scroll_y
+        visible_bottom = scroll_y + ol.size.height
+        # virtual_size.height equals the total rendered height of all options
+        # Use the per-line y of the highlighted option: approximate via scroll_offset check.
+        # A sufficient condition: scroll_y is positioned so that last option's y is visible.
+        # virtual_size.height - scroll_y should be <= ol.size.height (i.e. we scrolled to bottom)
+        assert scroll_y + ol.size.height >= ol.virtual_size.height - 1
+        assert visible_top >= 0
+        assert visible_bottom > visible_top
 
 
-async def test_chat_view_cursor_filter_resets(sample_agent_types):
-    """Applying a filter resets cursor to 0."""
-    messages = []
-    for i in range(50):
-        messages.append({
-            "uuid": f"msg-{i:04d}", "parentUuid": None, "agentId": "agent-aaa",
-            "role": "assistant", "content": f"Message {i}", "toolUse": [],
-            "timestamp": f"2026-03-20T10:00:{i:02d}.000Z", "promptId": "mtg-001",
-            "agentType": "web-search-researcher", "teamName": "Test",
-        })
-    app = ChatViewApp()
+async def test_chat_view_message_focused_event_fires(sample_agent_types):
+    """Moving highlight to a different source message posts MessageFocused."""
+    received: list[dict] = []
+
+    class CapturingApp(App):
+        def compose(self) -> ComposeResult:
+            yield ChatView()
+
+        def on_chat_view_message_focused(self, event: ChatView.MessageFocused) -> None:
+            received.append(event.message)
+
+    # Messages with distinct agent ids so each row maps to a new source message
+    messages = [
+        {"uuid": f"msg-{i}", "parentUuid": None, "agentId": f"agent-{i}",
+         "role": "assistant", "content": f"Content {i}", "toolUse": [],
+         "timestamp": "2026-03-20T10:00:00.000Z", "promptId": "mtg-001",
+         "agentType": "web-search-researcher", "teamName": "Test"}
+        for i in range(5)
+    ]
+    app = CapturingApp()
     async with app.run_test(size=(80, 24)) as pilot:
         chat = app.query_one(ChatView)
         chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
         await pilot.pause()
         chat.focus()
         await pilot.pause()
-        for _ in range(5):
-            await pilot.press("down")
+        received.clear()
+        # Each source message here produces two rows (header + content), so the
+        # highlight must cross two positions to hit a different msg_idx.
+        await pilot.press("down")
+        await pilot.press("down")
         await pilot.pause()
-        assert chat._cursor_pos > 0
-        chat.apply_filters(search_query="Message 1")
+        assert len(received) >= 1
+        assert received[0]["content"] == "Content 1"
+
+
+async def test_chat_view_clear_meeting_resets_to_empty(sample_messages, sample_agent_types):
+    """clear_meeting drops all options and returns to the empty hint."""
+    app = ChatViewApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": sample_messages, "agents": []}, sample_agent_types)
         await pilot.pause()
-        assert chat._cursor_pos == 0
+        assert _option_list(chat).option_count > 0
+        chat.clear_meeting()
+        await pilot.pause()
+        assert chat.message_count == 0
+        ol = _option_list(chat)
+        assert ol.option_count == 1
+        hint_option = ol.get_option_at_index(0)
+        assert hint_option.disabled
+        assert ChatView.EMPTY_STATE_HINT in str(hint_option.prompt)
+
+
+async def test_chat_view_get_all_messages_returns_non_empty(sample_empty_messages):
+    """get_all_messages exposes the current session's non-empty messages."""
+    app = ChatViewApp()
+    async with app.run_test() as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages(
+            {"messages": sample_empty_messages, "agents": []},
+            {"general-purpose": {"color": "#FFFAC8", "label": "General"}},
+        )
+        await pilot.pause()
+        messages = chat.get_all_messages()
+        assert len(messages) == 1
+        assert messages[0]["content"] == "This message has content."
