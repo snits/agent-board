@@ -25,7 +25,7 @@ def test_derive_display_name_fallback():
 
 def test_scan_projects_finds_sessions_with_subagents(tmp_path):
     """Only sessions with subagents/ directories are discovered."""
-    project_dir = tmp_path / "-Users-jsnitsel-test-project"
+    project_dir = tmp_path / "-Users-testuser-test-project"
     project_dir.mkdir()
 
     session_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
@@ -39,7 +39,7 @@ def test_scan_projects_finds_sessions_with_subagents(tmp_path):
 
     projects = scan_projects(tmp_path)
     assert len(projects) == 1
-    assert projects[0]["slug"] == "-Users-jsnitsel-test-project"
+    assert projects[0]["slug"] == "-Users-testuser-test-project"
     assert len(projects[0]["sessions"]) == 1
     assert projects[0]["sessions"][0]["id"] == session_id
 
