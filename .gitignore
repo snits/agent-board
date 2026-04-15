@@ -10,3 +10,6 @@ __pycache__/
 *.db
 agent_board.egg-info/
 build/
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
