@@ -222,12 +222,8 @@ def test_build_rows_header_on_agent_change():
     }
     rows = _build_rows(msgs, agent_types)
     assert len(rows) == 4
-    assert "msg-header" in rows[0][1]
     assert "General" in rows[0][0]
-    assert "msg-content" in rows[1][1]
-    assert "msg-header" in rows[2][1]
     assert "Researcher" in rows[2][0]
-    assert "msg-content" in rows[3][1]
 
 
 def test_build_rows_no_header_same_agent():
@@ -243,7 +239,7 @@ def test_build_rows_no_header_same_agent():
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
     assert len(rows) == 3
-    headers = [r for r in rows if r[1] == "msg-header"]
+    headers = [r for r in rows if "[bold" in r[0]]
     assert len(headers) == 1
 
 
@@ -260,14 +256,14 @@ def test_build_rows_tool_rows():
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
     assert len(rows) == 4
-    tool_rows = [r for r in rows if r[1] == "tool-summary"]
+    tool_rows = [r for r in rows if "⚙" in r[0]]
     assert len(tool_rows) == 2
     assert "Read" in tool_rows[0][0]
     assert "Write" in tool_rows[1][0]
 
 
-def test_build_rows_user_message_class():
-    """User messages get the msg-user class."""
+def test_build_rows_user_message_dim_styling():
+    """User messages get [dim] markup styling."""
     msgs = [
         {"agentId": "a1", "agentType": "general-purpose", "role": "user",
          "content": "Question", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
@@ -275,9 +271,10 @@ def test_build_rows_user_message_class():
     ]
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
-    content_rows = [r for r in rows if "msg-content" in r[1]]
+    content_rows = [r for r in rows if "[bold" not in r[0]]
     assert len(content_rows) == 1
-    assert "msg-user" in content_rows[0][1]
+    assert content_rows[0][0].startswith("[dim]")
+    assert content_rows[0][0].endswith("[/dim]")
 
 
 def test_build_rows_truncates_long_content():
@@ -290,7 +287,7 @@ def test_build_rows_truncates_long_content():
     ]
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
-    content_rows = [r for r in rows if "msg-content" in r[1]]
+    content_rows = [r for r in rows if "[bold" not in r[0]]
     assert len(content_rows) == 1
     assert "\n" not in content_rows[0][0]
     assert "…" in content_rows[0][0]
@@ -379,12 +376,12 @@ def test_build_rows_includes_msg_index():
     ]
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
-    assert all(len(r) == 3 for r in rows)
-    assert rows[0][2] == 0  # header
-    assert rows[1][2] == 0  # content
-    assert rows[2][2] == 0  # tool
-    assert rows[3][2] == 1  # header
-    assert rows[4][2] == 1  # content
+    assert all(len(r) == 2 for r in rows)
+    assert rows[0][1] == 0  # header
+    assert rows[1][1] == 0  # content
+    assert rows[2][1] == 0  # tool
+    assert rows[3][1] == 1  # header
+    assert rows[4][1] == 1  # content
 
 
 async def test_chat_view_highlight_starts_at_zero(sample_agent_types):
