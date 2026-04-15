@@ -461,9 +461,11 @@
 
       // Reload current session if one is selected
       if (state.currentSessionId) {
-        const activeEl = document.querySelector('.tree-session.active');
-        if (activeEl) {
-          activeEl.click();
+        const sessionEl = projectTree.querySelector(
+          `.tree-session[data-session-id="${state.currentSessionId}"]`
+        );
+        if (sessionEl) {
+          toggleSession(sessionEl, state.currentSessionId);
         }
       }
     } catch (err) {
