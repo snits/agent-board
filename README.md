@@ -42,7 +42,7 @@ Then open http://localhost:8080 in your browser.
 
 The TUI reads preprocessed data from `~/.local/share/agent-board/` by default; override with `--data-dir`. The `--source` flag sets the Claude projects directory used when refreshing live.
 
-**TUI keybindings:** `q` quit, `/` search, `f` filter by agent, `v` toggle detail pane, `Tab` switch panel, `r` refresh data, `Esc` back
+**TUI keybindings:** `q` quit, `/` search, `f` filter by agent, `Tab` switch panel, `r` refresh data, `Esc` back
 
 By default, Agent Board scans `~/.claude/projects/` for agent team sessions.
 

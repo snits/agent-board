@@ -150,30 +150,6 @@ async def test_rebuild_preserves_session_selection(data_dir):
         assert chat.message_count > 0
 
 
-async def test_rebuild_preserves_detail_pane_visibility(data_dir):
-    """After rebuild, the detail pane remains visible if it was open."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test(size=(80, 40)) as pilot:
-        pane = app.query_one(DetailPane)
-        tree = app.query_one(NavTree)
-
-        # Select a session and open detail pane
-        project_node = tree.root.children[0]
-        session_node = project_node.children[0]
-        tree.select_node(session_node)
-        await pilot.pause()
-        await pilot.press("v")
-        await pilot.pause()
-        assert pane.is_visible
-
-        # Rebuild
-        app._rebuild_after_refresh()
-        await pilot.pause()
-
-        # Detail pane should still be visible
-        assert pane.is_visible
-
-
 async def test_rebuild_handles_removed_session(data_dir, sample_index):
     """When the selected session is removed from index, rebuild shows empty state."""
     app = AgentBoardApp(data_dir=data_dir)

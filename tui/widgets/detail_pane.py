@@ -12,12 +12,11 @@ class DetailPane(ScrollableContainer):
     DEFAULT_CSS = """
     DetailPane {
         height: 2fr;
-        display: none;
         border-top: solid $accent-darken-2;
         padding: 0 1;
     }
-    DetailPane.-visible {
-        display: block;
+    DetailPane:focus-within {
+        border-top: heavy $accent;
     }
     """
 
@@ -28,18 +27,6 @@ class DetailPane(ScrollableContainer):
 
     def compose(self):
         yield self._content
-
-    def show(self) -> None:
-        """Show the detail pane."""
-        self.add_class("-visible")
-
-    def hide(self) -> None:
-        """Hide the detail pane."""
-        self.remove_class("-visible")
-
-    @property
-    def is_visible(self) -> bool:
-        return self.has_class("-visible")
 
     def update_message(self, message: dict | None) -> None:
         """Render a message's full content, or clear if None."""
