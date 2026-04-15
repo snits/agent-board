@@ -36,11 +36,13 @@ Then open http://localhost:8080 in your browser.
 # Preprocess and launch the terminal viewer
 .venv/bin/python serve.py --tui
 
-# Or run the TUI standalone (requires preprocessed data in ./data/)
-.venv/bin/python -m tui
+# Or run the TUI standalone against already-preprocessed data
+.venv/bin/python -m tui [--data-dir PATH] [--source PATH]
 ```
 
-**TUI keybindings:** `q` quit, `/` search, `f` filter by agent, `t` toggle tool details, `Tab` switch panel, `n`/`p` next/prev meeting, `Esc` back
+The TUI reads preprocessed data from `~/.local/share/agent-board/` by default; override with `--data-dir`. The `--source` flag sets the Claude projects directory used when refreshing live.
+
+**TUI keybindings:** `q` quit, `/` search, `f` filter by agent, `v` toggle detail pane, `Tab` switch panel, `r` refresh data, `Esc` back
 
 By default, Agent Board scans `~/.claude/projects/` for agent team sessions.
 
@@ -50,7 +52,7 @@ By default, Agent Board scans `~/.claude/projects/` for agent team sessions.
 serve.py [--source PATH] [--output PATH] [--port PORT] [--skip-preprocess] [--tui]
 
   --source PATH          Claude projects directory (default: ~/.claude/projects/)
-  --output PATH          Preprocessed data output directory (default: ./data/)
+  --output PATH          Preprocessed data output directory (default: ~/.local/share/agent-board/)
   --port PORT            HTTP server port (default: 8080)
   --skip-preprocess      Skip preprocessing, serve existing data
   --tui                  Launch terminal UI instead of web server
@@ -86,7 +88,7 @@ Agent Board has two parts:
 
         ↓  preprocess.py
 
-data/
+~/.local/share/agent-board/        (override with --output)
   ├── index.json                  ← project/session tree
   ├── agent-types.json            ← agent type → color/label
   └── sessions/{id}/
@@ -114,9 +116,10 @@ agent-board/
   │   ├── data.py            # JSON data loading layer
   │   ├── __main__.py        # Entry point for python -m tui
   │   └── widgets/           # Nav tree, chat view, agent bar, search bar
-  ├── tests/                 # pytest test suite
-  └── data/                  # Generated output (gitignored)
+  └── tests/                 # pytest test suite
 ```
+
+Generated output is written to `~/.local/share/agent-board/` by default (XDG-compliant, override with `--output`).
 
 ## Running tests
 
