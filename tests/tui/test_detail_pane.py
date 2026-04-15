@@ -1,5 +1,5 @@
 # ABOUTME: Tests for the detail pane widget.
-# ABOUTME: Verifies full message rendering and toggle behavior.
+# ABOUTME: Verifies full message rendering and default visibility.
 
 import pytest
 from textual.app import App, ComposeResult
@@ -20,26 +20,12 @@ class DetailPaneApp(App):
         yield DetailPane(agent_types=AGENT_TYPES)
 
 
-async def test_detail_pane_starts_hidden():
-    """DetailPane is hidden by default."""
+async def test_detail_pane_visible_by_default():
+    """DetailPane is always visible — no toggle, no hidden state."""
     app = DetailPaneApp()
     async with app.run_test(size=(80, 24)) as pilot:
         pane = app.query_one(DetailPane)
-        assert not pane.has_class("-visible")
-
-
-async def test_detail_pane_show_hide():
-    """Toggle visibility with show/hide methods."""
-    app = DetailPaneApp()
-    async with app.run_test(size=(80, 24)) as pilot:
-        pane = app.query_one(DetailPane)
-        assert not pane.has_class("-visible")
-        pane.show()
-        await pilot.pause()
-        assert pane.has_class("-visible")
-        pane.hide()
-        await pilot.pause()
-        assert not pane.has_class("-visible")
+        assert pane.styles.display != "none"
 
 
 async def test_detail_pane_renders_message():
@@ -47,8 +33,6 @@ async def test_detail_pane_renders_message():
     app = DetailPaneApp()
     async with app.run_test(size=(80, 24)) as pilot:
         pane = app.query_one(DetailPane)
-        pane.show()
-        await pilot.pause()
         msg = {
             "agentType": "general-purpose",
             "timestamp": "2026-03-20T10:00:00.000Z",
@@ -68,8 +52,6 @@ async def test_detail_pane_clears_on_none():
     app = DetailPaneApp()
     async with app.run_test(size=(80, 24)) as pilot:
         pane = app.query_one(DetailPane)
-        pane.show()
-        await pilot.pause()
         msg = {"agentType": "general-purpose", "timestamp": "2026-03-20T10:00:00.000Z",
                "content": "Hello", "_tool_summaries": []}
         pane.update_message(msg)

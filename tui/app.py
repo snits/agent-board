@@ -42,8 +42,6 @@ class AgentBoardApp(App):
         Binding("q", "quit", "Quit"),
         Binding("slash", "show_search", "Search", key_display="/", priority=True),
         Binding("f", "toggle_agent_filter", "Filter agents"),
-
-        Binding("v", "toggle_detail", "Detail"),
         Binding("tab", "switch_focus", "Switch panel", show=False),
         Binding("escape", "escape", "Back", show=False, priority=True),
         Binding("r", "refresh_data", "Refresh data"),
@@ -109,17 +107,6 @@ class AgentBoardApp(App):
             self._agent_types,
         )
 
-    def action_toggle_detail(self) -> None:
-        """Toggle the detail pane."""
-        chat = self.query_one(ChatView)
-        if not chat._meeting_data:
-            return
-        pane = self.query_one(DetailPane)
-        if pane.is_visible:
-            pane.hide()
-        else:
-            pane.show()
-
     @on(ChatView.MessageFocused)
     def on_message_focused(self, event: ChatView.MessageFocused) -> None:
         """Route focused message to the detail pane."""
@@ -139,9 +126,7 @@ class AgentBoardApp(App):
 
     def _rebuild_after_refresh(self) -> None:
         """Reload data from disk and rebuild the UI after preprocessing."""
-        # Save state to restore after rebuild
         prev_session_id = self._current_session_node.session_id if self._current_session_node else None
-        prev_detail_visible = self.query_one(DetailPane).is_visible
 
         index_data = load_index(self._data_dir)
         self._agent_types = load_agent_types(self._data_dir)
@@ -151,14 +136,11 @@ class AgentBoardApp(App):
         self.query_one(NavTree).reload(index_data)
         self.query_one(AgentBar).clear()
         self.query_one(ChatView).clear_meeting()
-        self.query_one(DetailPane).hide()
         self.query_one(DetailPane).update_message(None)
 
         # Restore previous session if it still exists
         if prev_session_id:
-            found = self.query_one(NavTree).select_session(prev_session_id)
-            if found and prev_detail_visible:
-                self.query_one(DetailPane).show()
+            self.query_one(NavTree).select_session(prev_session_id)
 
         self.notify("Data refreshed")
 
@@ -167,10 +149,9 @@ class AgentBoardApp(App):
         self.query_one(SearchBar).show()
 
     def action_escape(self) -> None:
-        """Handle Escape — close pane, hide search, clear filters, or return focus."""
+        """Handle Escape — step focus back from detail pane, hide search, or clear filters."""
         pane = self.query_one(DetailPane)
-        if pane.is_visible:
-            pane.hide()
+        if pane.has_focus_within:
             self.query_one(ChatView).focus()
             return
         search = self.query_one(SearchBar)
@@ -187,17 +168,14 @@ class AgentBoardApp(App):
         self.query_one("#nav-tree", NavTree).focus()
 
     def action_switch_focus(self) -> None:
-        """Cycle focus: NavTree -> ChatView -> DetailPane (if visible) -> NavTree."""
+        """Cycle focus: NavTree -> ChatView -> DetailPane -> NavTree."""
         nav = self.query_one("#nav-tree", NavTree)
         chat = self.query_one("#chat-view", ChatView)
         pane = self.query_one("#detail-pane", DetailPane)
         if nav.has_focus_within:
             chat.focus()
         elif chat.has_focus_within:
-            if pane.is_visible:
-                pane.focus()
-            else:
-                nav.focus()
+            pane.focus()
         else:
             nav.focus()
 

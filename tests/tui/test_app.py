@@ -115,26 +115,13 @@ async def test_tab_switches_focus_nav_to_chat(data_dir):
         assert chat.has_focus_within
 
 
-async def test_tab_switches_focus_chat_to_nav(data_dir):
-    """Tab moves focus from chat view to nav tree."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test() as pilot:
-        nav = app.query_one(NavTree)
-        chat = app.query_one(ChatView)
-        chat.focus()
-        await pilot.pause()
-        assert chat.has_focus_within
-        await pilot.press("tab")
-        await pilot.pause()
-        assert nav.has_focus_within
-
-
 async def test_tab_round_trip(data_dir):
-    """Tab cycles nav -> chat -> nav without getting stuck."""
+    """Tab cycles nav -> chat -> detail pane -> nav without getting stuck."""
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test() as pilot:
         nav = app.query_one(NavTree)
         chat = app.query_one(ChatView)
+        pane = app.query_one(DetailPane)
         nav.focus()
         await pilot.pause()
         assert nav.has_focus_within
@@ -142,6 +129,10 @@ async def test_tab_round_trip(data_dir):
         await pilot.press("tab")
         await pilot.pause()
         assert chat.has_focus_within
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert pane.has_focus_within
 
         await pilot.press("tab")
         await pilot.pause()
@@ -314,75 +305,18 @@ async def test_filter_cycle_shows_position(data_dir):
         assert "[2/" in markup
 
 
-async def test_detail_pane_toggle(data_dir):
-    """Pressing 'v' toggles the detail pane."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test(size=(80, 40)) as pilot:
-        pane = app.query_one(DetailPane)
-        assert not pane.has_class("-visible")
-
-        # Load a session first
-        tree = app.query_one(NavTree)
-        project_node = tree.root.children[0]
-        session_node = project_node.children[0]
-        tree.select_node(session_node)
-        await pilot.pause()
-
-        await pilot.press("v")
-        await pilot.pause()
-        assert pane.has_class("-visible")
-
-        await pilot.press("v")
-        await pilot.pause()
-        assert not pane.has_class("-visible")
-
-
-async def test_detail_pane_no_toggle_without_session(data_dir):
-    """v is a no-op when no session is loaded."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test(size=(80, 40)) as pilot:
-        pane = app.query_one(DetailPane)
-        await pilot.press("v")
-        await pilot.pause()
-        assert not pane.has_class("-visible")
-
-
-async def test_escape_closes_detail_pane(data_dir):
-    """Escape closes the detail pane before other actions."""
-    app = AgentBoardApp(data_dir=data_dir)
-    async with app.run_test(size=(80, 40)) as pilot:
-        tree = app.query_one(NavTree)
-        pane = app.query_one(DetailPane)
-
-        # Load a session and open detail pane
-        project_node = tree.root.children[0]
-        session_node = project_node.children[0]
-        tree.select_node(session_node)
-        await pilot.pause()
-        await pilot.press("v")
-        await pilot.pause()
-        assert pane.has_class("-visible")
-
-        # Escape should close pane
-        await pilot.press("escape")
-        await pilot.pause()
-        assert not pane.has_class("-visible")
-
-
 async def test_tab_cycles_with_detail_pane(data_dir):
-    """Tab cycles NavTree -> ChatView -> DetailPane when pane is visible."""
+    """Tab cycles NavTree -> ChatView -> DetailPane, since the pane is always visible."""
     app = AgentBoardApp(data_dir=data_dir)
     async with app.run_test(size=(80, 40)) as pilot:
         tree = app.query_one(NavTree)
         chat = app.query_one(ChatView)
         pane = app.query_one(DetailPane)
 
-        # Load session and open pane
+        # Load session
         project_node = tree.root.children[0]
         session_node = project_node.children[0]
         tree.select_node(session_node)
-        await pilot.pause()
-        await pilot.press("v")
         await pilot.pause()
 
         # Start at nav
