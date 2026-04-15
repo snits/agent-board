@@ -244,7 +244,7 @@ def test_build_rows_no_header_same_agent():
 
 
 def test_build_rows_tool_rows():
-    """Tool uses produce separate tool-summary rows."""
+    """Tool uses produce separate rows summarizing each tool call."""
     msgs = [
         {"agentId": "a1", "agentType": "general-purpose", "role": "assistant",
          "content": "Working", "toolUse": [{"tool": "Read"}, {"tool": "Write"}],
