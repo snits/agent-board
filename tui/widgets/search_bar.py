@@ -13,13 +13,13 @@ class SearchBar(Input):
     SearchBar {
         dock: bottom;
         display: none;
-        height: 1;
-        border: none;
-        padding: 0 1;
         background: $boost;
     }
     SearchBar.-visible {
         display: block;
+    }
+    SearchBar.-textual-compact {
+        padding: 0 1;
     }
     """
 
@@ -34,6 +34,7 @@ class SearchBar(Input):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(placeholder="Search messages… (Esc to close)", **kwargs)
+        self.add_class("-textual-compact")
         self._debounce_timer: Timer | None = None
 
     def _cancel_debounce(self) -> None:
