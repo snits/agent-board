@@ -7,25 +7,38 @@ A viewer for Claude Code agent team transcripts. Browse multi-agent conversation
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
-## Setup
+## Installation
 
 ```bash
 # Clone and enter the project
 git clone <repo-url>
 cd agent-board
 
-# Create a virtual environment and install
+# Install with uv (recommended)
 uv venv .venv
 uv pip install -e ".[dev]" --python .venv/bin/python
+source .venv/bin/activate
+
+# Or install with pip
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
+
+This installs three commands:
+
+| Command | Description |
+|---------|-------------|
+| `agent-board` | Preprocess transcripts and start the web server |
+| `agent-board-tui` | Launch the terminal UI standalone |
+| `agent-board-preprocess` | Run preprocessing without starting a server |
 
 ## Usage
 
 ### Web UI
 
 ```bash
-# Preprocess transcripts and start the web server
-.venv/bin/python serve.py
+agent-board
 ```
 
 Then open http://localhost:8080 in your browser.
@@ -34,10 +47,10 @@ Then open http://localhost:8080 in your browser.
 
 ```bash
 # Preprocess and launch the terminal viewer
-.venv/bin/python serve.py --tui
+agent-board --tui
 
 # Or run the TUI standalone against already-preprocessed data
-.venv/bin/python -m tui [--data-dir PATH] [--source PATH]
+agent-board-tui [--data-dir PATH] [--source PATH]
 ```
 
 The TUI reads preprocessed data from `~/.local/share/agent-board/` by default; override with `--data-dir`. The `--source` flag sets the Claude projects directory used when refreshing live.
@@ -49,7 +62,7 @@ By default, Agent Board scans `~/.claude/projects/` for agent team sessions.
 ### CLI options
 
 ```
-serve.py [--source PATH] [--output PATH] [--port PORT] [--skip-preprocess] [--tui]
+agent-board [--source PATH] [--output PATH] [--port PORT] [--skip-preprocess] [--tui]
 
   --source PATH          Claude projects directory (default: ~/.claude/projects/)
   --output PATH          Preprocessed data output directory (default: ~/.local/share/agent-board/)
@@ -63,7 +76,7 @@ serve.py [--source PATH] [--output PATH] [--port PORT] [--skip-preprocess] [--tu
 To regenerate the data without starting the server:
 
 ```bash
-.venv/bin/python preprocess.py [--source PATH] [--output PATH]
+agent-board-preprocess [--source PATH] [--output PATH]
 ```
 
 ## How it works
@@ -124,7 +137,7 @@ Generated output is written to `~/.local/share/agent-board/` by default (XDG-com
 ## Running tests
 
 ```bash
-.venv/bin/python -m pytest tests/ -v
+pytest tests/ -v
 ```
 
 ## License
