@@ -9,12 +9,14 @@ from unittest.mock import patch
 from serve import Handler
 
 
-def _make_handler(data_dir: Path, directory: str = "/tmp") -> Handler:
+def _make_handler(data_dir: Path, directory: str = "/tmp",
+                  frontend_dir: Path | None = None) -> Handler:
     """Create a Handler instance with minimal socket plumbing for testing."""
     # Handler.__init__ requires request, client_address, server args.
     # We bypass __init__ and set up the attributes translate_path needs.
     handler = Handler.__new__(Handler)
     handler.data_dir = data_dir
+    handler.frontend_dir = frontend_dir or data_dir
     # SimpleHTTPRequestHandler.translate_path needs self.directory
     handler.directory = directory
     return handler
@@ -40,17 +42,27 @@ def test_translate_path_routes_data_subdir(tmp_path):
     assert result == str(data_dir / "sessions" / "abc" / "session.json")
 
 
-def test_translate_path_non_data_uses_default(tmp_path):
-    """Non-/data/ paths use the standard translate_path behavior."""
+def test_translate_path_routes_frontend_to_frontend_dir(tmp_path):
+    """Requests for /frontend/... are served from the frontend package directory."""
+    frontend_dir = tmp_path / "frontend"
+    frontend_dir.mkdir()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    handler = _make_handler(data_dir, frontend_dir=frontend_dir)
+
+    result = handler.translate_path("/frontend/index.html")
+    assert result == str(frontend_dir / "index.html")
+
+
+def test_translate_path_non_routed_uses_default(tmp_path):
+    """Paths outside /data/ and /frontend/ use the standard translate_path behavior."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     project_root = str(tmp_path / "project")
     handler = _make_handler(data_dir, directory=project_root)
 
-    result = handler.translate_path("/frontend/index.html")
-    # Should delegate to SimpleHTTPRequestHandler which joins with self.directory
+    result = handler.translate_path("/other/file.txt")
     assert result.startswith(project_root)
-    assert "frontend" in result
 
 
 def test_translate_path_blocks_traversal(tmp_path):

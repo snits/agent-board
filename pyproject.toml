@@ -24,7 +24,10 @@ agent-board-preprocess = "preprocess:main"
 py-modules = ["serve", "preprocess"]
 
 [tool.setuptools.packages.find]
-include = ["tui*", "preprocessor*"]
+include = ["tui*", "preprocessor*", "frontend"]
+
+[tool.setuptools.package-data]
+frontend = ["*.html", "*.css", "*.js"]
 
 [project.optional-dependencies]
 dev = [

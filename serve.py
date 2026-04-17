@@ -7,6 +7,7 @@ import json
 import socketserver
 from pathlib import Path
 
+from frontend import root_dir as frontend_root
 from preprocessor.config import load_config
 from preprocessor.paths import default_archive_dir, default_data_dir, default_source_dir
 from preprocessor.pipeline import run_preprocess
@@ -16,6 +17,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     """Serves frontend from project root and /data/ from the XDG data directory."""
 
     data_dir: Path = Path("data")
+    frontend_dir: Path = frontend_root()
     source_dir: Path = Path(".")
     archive_dir: Path = Path(".")
 
@@ -47,15 +49,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404)
 
     def translate_path(self, path):
-        """Route /data/ requests to the XDG data directory."""
-        if path.startswith("/data/") or path == "/data":
-            relative = path[len("/data"):]
-            if relative.startswith("/"):
-                relative = relative[1:]
-            resolved = (self.data_dir / relative).resolve()
-            if not resolved.is_relative_to(self.data_dir.resolve()):
-                return str(self.data_dir)
-            return str(resolved)
+        """Route /data/ and /frontend/ requests to their installed directories."""
+        for prefix, base_dir in (("/data", self.data_dir), ("/frontend", self.frontend_dir)):
+            if path.startswith(prefix + "/") or path == prefix:
+                relative = path[len(prefix):]
+                if relative.startswith("/"):
+                    relative = relative[1:]
+                resolved = (base_dir / relative).resolve()
+                if not resolved.is_relative_to(base_dir.resolve()):
+                    return str(base_dir)
+                return str(resolved)
         return super().translate_path(path)
 
     def log_request(self, code="-", size="-"):
