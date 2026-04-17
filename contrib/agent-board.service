@@ -1,0 +1,12 @@
+[Unit]
+Description=Agent Board – Claude Code transcript viewer
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=agent-board
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
