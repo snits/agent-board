@@ -1,5 +1,5 @@
 # ABOUTME: Tests for the web server's data directory routing and refresh endpoint.
-# ABOUTME: Validates that /data/ URL paths map to the XDG data directory safely.
+# ABOUTME: Validates that /data/ URL paths map to the XDG data directory and /frontend/ URL paths map to the package frontend directory safely.
 
 import io
 import json
