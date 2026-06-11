@@ -121,7 +121,7 @@ async def test_chat_view_user_messages_rendered(sample_messages, sample_agent_ty
         await pilot.pause()
         prompts = [opt.prompt for opt in _option_list(chat).options]
         # At least one option's Rich Text carries a dim style span (from a user-role content line).
-        # Prompts are wrapped via Text.from_markup so styling is in spans, not literal "[dim]".
+        # Prompts are styled by construction, so styling is in spans, not literal "[dim]".
         has_dim = any(
             any("dim" in str(span.style) for span in getattr(p, "spans", []))
             for p in prompts
