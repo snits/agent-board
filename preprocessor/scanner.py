@@ -80,15 +80,16 @@ def _match_path_components(current: Path, remaining: str) -> Path | None:
     return None
 
 
-WORKTREE_SEPARATOR = "--claude-worktrees-"
+WORKTREE_SEPARATORS = ["--claude-worktrees-", "--worktrees-"]
 
 
 def _parent_slug(dir_name: str) -> str | None:
     """Extract the parent project slug from a worktree directory name."""
-    idx = dir_name.find(WORKTREE_SEPARATOR)
-    if idx < 0:
-        return None
-    return dir_name[:idx]
+    for pattern in WORKTREE_SEPARATORS:
+        idx = dir_name.find(pattern)
+        if idx >= 0:
+            return dir_name[:idx]
+    return None
 
 
 def scan_projects(source_dir: Path) -> list[dict]:
