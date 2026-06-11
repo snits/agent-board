@@ -11,7 +11,9 @@ def test_derive_display_name(tmp_path):
     """Project slug resolved via filesystem to human-readable path."""
     real_path = tmp_path / "Users" / "testuser" / "desert-island" / "phoenix"
     real_path.mkdir(parents=True)
-    slug = "-" + str(tmp_path / "Users" / "testuser" / "desert-island" / "phoenix").replace("/", "-")
+    slug = "-" + str(
+        tmp_path / "Users" / "testuser" / "desert-island" / "phoenix"
+    ).replace("/", "-")
     result = derive_display_name(slug)
     assert result == "desert-island/phoenix"
 
@@ -31,7 +33,18 @@ def test_scan_projects_finds_sessions_with_subagents(tmp_path):
     session_id = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
     session_dir = project_dir / session_id / "subagents"
     session_dir.mkdir(parents=True)
-    write_jsonl(project_dir / f"{session_id}.jsonl", [{"type": "user", "message": {"role": "user", "content": "hi"}, "uuid": "u1", "timestamp": "2026-03-21T22:00:00Z", "sessionId": session_id}])
+    write_jsonl(
+        project_dir / f"{session_id}.jsonl",
+        [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "hi"},
+                "uuid": "u1",
+                "timestamp": "2026-03-21T22:00:00Z",
+                "sessionId": session_id,
+            }
+        ],
+    )
 
     write_jsonl(project_dir / "dddd-eeee.jsonl", [{"type": "user"}])
 
@@ -42,6 +55,110 @@ def test_scan_projects_finds_sessions_with_subagents(tmp_path):
     assert projects[0]["slug"] == "-Users-testuser-test-project"
     assert len(projects[0]["sessions"]) == 1
     assert projects[0]["sessions"][0]["id"] == session_id
+
+
+def test_scan_projects_groups_worktree_sessions_under_parent(tmp_path):
+    """Worktree directories merge their sessions into the parent project."""
+    parent_slug = "-Users-testuser-my-project"
+    wt_slug = f"{parent_slug}--claude-worktrees-feature-branch"
+
+    # Parent project with one session
+    parent_dir = tmp_path / parent_slug
+    parent_dir.mkdir()
+    sid1 = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+    (parent_dir / sid1 / "subagents").mkdir(parents=True)
+    write_jsonl(
+        parent_dir / f"{sid1}.jsonl",
+        [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "hi"},
+                "uuid": "u1",
+                "timestamp": "2026-03-21T22:00:00Z",
+                "sessionId": sid1,
+            },
+        ],
+    )
+
+    # Worktree project with a different session
+    wt_dir = tmp_path / wt_slug
+    wt_dir.mkdir()
+    sid2 = "11111111-2222-3333-4444-555555555555"
+    (wt_dir / sid2 / "subagents").mkdir(parents=True)
+    write_jsonl(
+        wt_dir / f"{sid2}.jsonl",
+        [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "worktree work"},
+                "uuid": "u2",
+                "timestamp": "2026-03-22T10:00:00Z",
+                "sessionId": sid2,
+            },
+        ],
+    )
+
+    projects = scan_projects(tmp_path)
+    assert len(projects) == 1
+    assert projects[0]["slug"] == parent_slug
+    session_ids = {s["id"] for s in projects[0]["sessions"]}
+    assert session_ids == {sid1, sid2}
+
+
+def test_scan_projects_worktree_without_parent_dir(tmp_path):
+    """A worktree directory whose parent dir doesn't exist still creates the project."""
+    wt_slug = "-Users-testuser-solo-project--claude-worktrees-fix-bug"
+
+    wt_dir = tmp_path / wt_slug
+    wt_dir.mkdir()
+    sid = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
+    (wt_dir / sid / "subagents").mkdir(parents=True)
+    write_jsonl(
+        wt_dir / f"{sid}.jsonl",
+        [
+            {
+                "type": "user",
+                "message": {"role": "user", "content": "fix"},
+                "uuid": "u1",
+                "timestamp": "2026-03-21T22:00:00Z",
+                "sessionId": sid,
+            },
+        ],
+    )
+
+    projects = scan_projects(tmp_path)
+    assert len(projects) == 1
+    assert projects[0]["slug"] == "-Users-testuser-solo-project"
+    assert len(projects[0]["sessions"]) == 1
+
+
+def test_scan_projects_multiple_worktrees_merge(tmp_path):
+    """Multiple worktrees for the same project all merge into one entry."""
+    parent_slug = "-Users-testuser-big-project"
+
+    # No parent dir — just worktrees
+    for i, wt_name in enumerate(["branch-a", "branch-b", "branch-c"]):
+        wt_dir = tmp_path / f"{parent_slug}--claude-worktrees-{wt_name}"
+        wt_dir.mkdir()
+        sid = f"{i + 1:08d}-aaaa-bbbb-cccc-dddddddddddd"
+        (wt_dir / sid / "subagents").mkdir(parents=True)
+        write_jsonl(
+            wt_dir / f"{sid}.jsonl",
+            [
+                {
+                    "type": "user",
+                    "message": {"role": "user", "content": f"work {i}"},
+                    "uuid": f"u{i}",
+                    "timestamp": f"2026-03-2{i + 1}T10:00:00Z",
+                    "sessionId": sid,
+                },
+            ],
+        )
+
+    projects = scan_projects(tmp_path)
+    assert len(projects) == 1
+    assert projects[0]["slug"] == parent_slug
+    assert len(projects[0]["sessions"]) == 3
 
 
 def test_scan_projects_empty_dir(tmp_path):
@@ -72,45 +189,58 @@ def _make_archive_project(tmp_path, slug, sessions):
     for session in sessions:
         sid = session["id"]
         # Main conversation JSONL
-        main_records = session.get("main_records", [
-            {
-                "type": "assistant",
-                "teamName": "meeting",
-                "promptId": "prompt-111",
-                "message": {"role": "assistant", "content": [{"type": "text", "text": "hello"}]},
-                "uuid": f"main-{sid[:8]}",
-                "parentUuid": None,
-                "timestamp": "2026-03-21T22:00:00Z",
-                "sessionId": sid,
-            }
-        ])
+        main_records = session.get(
+            "main_records",
+            [
+                {
+                    "type": "assistant",
+                    "teamName": "meeting",
+                    "promptId": "prompt-111",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "hello"}],
+                    },
+                    "uuid": f"main-{sid[:8]}",
+                    "parentUuid": None,
+                    "timestamp": "2026-03-21T22:00:00Z",
+                    "sessionId": sid,
+                }
+            ],
+        )
         write_jsonl(project_dir / f"{sid}.jsonl", main_records)
 
         # Agent JSONL files (flat, at project root)
         for agent in session.get("agents", []):
             aid = agent["agentId"]
-            records = agent.get("records", [
-                {
-                    "type": "user",
-                    "promptId": "prompt-111",
-                    "agentId": aid,
-                    "message": {"role": "user", "content": "Do stuff"},
-                    "uuid": f"{aid}-u1",
-                    "parentUuid": None,
-                    "isSidechain": True,
-                    "timestamp": "2026-03-21T22:00:01Z",
-                    "sessionId": sid,
-                },
-            ])
+            records = agent.get(
+                "records",
+                [
+                    {
+                        "type": "user",
+                        "promptId": "prompt-111",
+                        "agentId": aid,
+                        "message": {"role": "user", "content": "Do stuff"},
+                        "uuid": f"{aid}-u1",
+                        "parentUuid": None,
+                        "isSidechain": True,
+                        "timestamp": "2026-03-21T22:00:01Z",
+                        "sessionId": sid,
+                    },
+                ],
+            )
             write_jsonl(project_dir / f"agent-{aid}.jsonl", records)
 
 
 def test_scan_archive_finds_sessions(tmp_path):
     """Archive scanner discovers sessions from flat UUID.jsonl files."""
     sid = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
-    _make_archive_project(tmp_path, "-Users-test-myproject", [
-        {"id": sid, "agents": [{"agentId": "a1"}, {"agentId": "a2"}]},
-    ])
+    _make_archive_project(
+        tmp_path,
+        "-Users-test-myproject",
+        [
+            {"id": sid, "agents": [{"agentId": "a1"}, {"agentId": "a2"}]},
+        ],
+    )
 
     projects = scan_archive(tmp_path)
     assert len(projects) == 1
@@ -126,10 +256,14 @@ def test_scan_archive_groups_agents_by_session(tmp_path):
     """Agent files are grouped to the correct session by sessionId."""
     sid1 = "11111111-aaaa-bbbb-cccc-dddddddddddd"
     sid2 = "22222222-aaaa-bbbb-cccc-dddddddddddd"
-    _make_archive_project(tmp_path, "-Users-test-project", [
-        {"id": sid1, "agents": [{"agentId": "a1"}, {"agentId": "a2"}]},
-        {"id": sid2, "agents": [{"agentId": "a3"}]},
-    ])
+    _make_archive_project(
+        tmp_path,
+        "-Users-test-project",
+        [
+            {"id": sid1, "agents": [{"agentId": "a1"}, {"agentId": "a2"}]},
+            {"id": sid2, "agents": [{"agentId": "a3"}]},
+        ],
+    )
 
     projects = scan_archive(tmp_path)
     sessions = {s["id"]: s for s in projects[0]["sessions"]}
@@ -141,9 +275,13 @@ def test_scan_archive_groups_agents_by_session(tmp_path):
 def test_scan_archive_handles_session_with_no_agents(tmp_path):
     """Sessions with only a main JSONL and no agent files are still discovered."""
     sid = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
-    _make_archive_project(tmp_path, "-Users-test-project", [
-        {"id": sid, "agents": []},
-    ])
+    _make_archive_project(
+        tmp_path,
+        "-Users-test-project",
+        [
+            {"id": sid, "agents": []},
+        ],
+    )
 
     projects = scan_archive(tmp_path)
     session = projects[0]["sessions"][0]
@@ -153,9 +291,13 @@ def test_scan_archive_handles_session_with_no_agents(tmp_path):
 def test_scan_archive_ignores_summary_files(tmp_path):
     """Summary .txt files in the archive are ignored."""
     sid = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
-    _make_archive_project(tmp_path, "-Users-test-project", [
-        {"id": sid, "agents": [{"agentId": "a1"}]},
-    ])
+    _make_archive_project(
+        tmp_path,
+        "-Users-test-project",
+        [
+            {"id": sid, "agents": [{"agentId": "a1"}]},
+        ],
+    )
     # Add a summary file that should be ignored
     (tmp_path / "-Users-test-project" / f"{sid}-summary.txt").write_text("AI summary")
 

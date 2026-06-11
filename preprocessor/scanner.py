@@ -30,7 +30,7 @@ def derive_display_name(slug: str) -> str:
         parts = resolved.parts
         for i, part in enumerate(parts):
             if part == "Users" and i + 2 < len(parts):
-                return "/".join(parts[i + 2:])
+                return "/".join(parts[i + 2 :])
 
         return str(resolved)
 
@@ -39,7 +39,7 @@ def derive_display_name(slug: str) -> str:
     parts = path_str.split("-")
     try:
         users_idx = parts.index("Users")
-        remaining = parts[users_idx + 2:]
+        remaining = parts[users_idx + 2 :]
     except ValueError:
         remaining = parts
 
@@ -73,20 +73,35 @@ def _match_path_components(current: Path, remaining: str) -> Path | None:
         if remaining == name:
             return entry
         if remaining.startswith(name + "-"):
-            result = _match_path_components(entry, remaining[len(name) + 1:])
+            result = _match_path_components(entry, remaining[len(name) + 1 :])
             if result is not None:
                 return result
 
     return None
 
 
+WORKTREE_SEPARATOR = "--claude-worktrees-"
+
+
+def _parent_slug(dir_name: str) -> str | None:
+    """Extract the parent project slug from a worktree directory name."""
+    idx = dir_name.find(WORKTREE_SEPARATOR)
+    if idx < 0:
+        return None
+    return dir_name[:idx]
+
+
 def scan_projects(source_dir: Path) -> list[dict]:
-    """Scan a source directory for projects containing agent teams sessions."""
+    """Scan a source directory for projects containing agent teams sessions.
+
+    Worktree directories (containing '--claude-worktrees-') have their
+    sessions merged into the parent project.
+    """
     source_dir = Path(source_dir)
     if not source_dir.is_dir():
         return []
 
-    projects = []
+    by_slug: dict[str, dict] = {}
 
     for entry in sorted(source_dir.iterdir()):
         if not entry.is_dir():
@@ -96,13 +111,21 @@ def scan_projects(source_dir: Path) -> list[dict]:
         if not sessions:
             continue
 
-        projects.append({
-            "slug": entry.name,
-            "displayName": derive_display_name(entry.name),
-            "sessions": sessions,
-        })
+        slug = _parent_slug(entry.name) or entry.name
 
-    return projects
+        if slug in by_slug:
+            existing_ids = {s["id"] for s in by_slug[slug]["sessions"]}
+            for session in sessions:
+                if session["id"] not in existing_ids:
+                    by_slug[slug]["sessions"].append(session)
+        else:
+            by_slug[slug] = {
+                "slug": slug,
+                "displayName": derive_display_name(slug),
+                "sessions": list(sessions),
+            }
+
+    return sorted(by_slug.values(), key=lambda p: p["slug"])
 
 
 def _find_sessions(project_dir: Path) -> list[dict]:
@@ -119,12 +142,14 @@ def _find_sessions(project_dir: Path) -> list[dict]:
             continue
         main_jsonl = project_dir / f"{entry.name}.jsonl"
 
-        sessions.append({
-            "id": entry.name,
-            "dir": str(entry),
-            "subagentsDir": str(subagents_dir),
-            "mainJsonl": str(main_jsonl) if main_jsonl.exists() else None,
-        })
+        sessions.append(
+            {
+                "id": entry.name,
+                "dir": str(entry),
+                "subagentsDir": str(subagents_dir),
+                "mainJsonl": str(main_jsonl) if main_jsonl.exists() else None,
+            }
+        )
 
     return sessions
 
@@ -149,11 +174,13 @@ def scan_archive(archive_dir: Path) -> list[dict]:
         if not sessions:
             continue
 
-        projects.append({
-            "slug": entry.name,
-            "displayName": derive_display_name(entry.name),
-            "sessions": sessions,
-        })
+        projects.append(
+            {
+                "slug": entry.name,
+                "displayName": derive_display_name(entry.name),
+                "sessions": sessions,
+            }
+        )
 
     return projects
 
@@ -167,7 +194,11 @@ def _find_archive_sessions(project_dir: Path) -> list[dict]:
     # Find session JSONL files (UUID.jsonl, not agent-*.jsonl)
     session_ids = set()
     for f in project_dir.iterdir():
-        if f.suffix == ".jsonl" and _looks_like_uuid(f.stem) and not f.stem.startswith("agent-"):
+        if (
+            f.suffix == ".jsonl"
+            and _looks_like_uuid(f.stem)
+            and not f.stem.startswith("agent-")
+        ):
             session_ids.add(f.stem)
 
     if not session_ids:
@@ -183,13 +214,15 @@ def _find_archive_sessions(project_dir: Path) -> list[dict]:
     sessions = []
     for sid in sorted(session_ids):
         main_jsonl = project_dir / f"{sid}.jsonl"
-        sessions.append({
-            "id": sid,
-            "dir": str(project_dir),
-            "subagentsDir": None,
-            "agentJsonls": agents_by_session.get(sid, []),
-            "mainJsonl": str(main_jsonl) if main_jsonl.exists() else None,
-        })
+        sessions.append(
+            {
+                "id": sid,
+                "dir": str(project_dir),
+                "subagentsDir": None,
+                "agentJsonls": agents_by_session.get(sid, []),
+                "mainJsonl": str(main_jsonl) if main_jsonl.exists() else None,
+            }
+        )
 
     return sessions
 
@@ -211,4 +244,4 @@ def _read_session_id(jsonl_path: Path) -> str | None:
 
 def _looks_like_uuid(name: str) -> bool:
     """Check if a string looks like a UUID."""
-    return bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-', name))
+    return bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-", name))
