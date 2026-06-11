@@ -10,22 +10,17 @@ from textual.widgets import OptionList
 from textual.widgets.option_list import Option
 
 
-def _single_line(markup: str) -> Text:
-    """Render markup as a Rich Text forced onto a single terminal line.
+def _single_line(text: Text) -> Text:
+    """Force a Rich Text onto a single terminal line.
 
     OptionList scroll math tracks options by index but renders per terminal
     line, so any option whose content wraps across multiple lines causes the
     highlight to drift from the scroll offset. Ellipsizing excess content
     keeps every option exactly one line tall.
     """
-    text = Text.from_markup(markup, overflow="ellipsis")
+    text.overflow = "ellipsis"
     text.no_wrap = True
     return text
-
-
-def _escape_markup(text: str) -> str:
-    """Escape all square brackets so Rich never interprets them as tags."""
-    return text.replace("[", "\\[")
 
 
 def is_empty_message(msg: dict) -> bool:
@@ -87,9 +82,14 @@ def _precompute_messages(messages: list[dict]) -> None:
         msg["_search_text"] = "\n".join(parts).lower()
 
 
-def _build_rows(messages: list[dict], agent_types: dict) -> list[tuple[str, int]]:
-    """Convert filtered messages into a flat list of (markup, msg_index) rows."""
-    rows: list[tuple[str, int]] = []
+def _build_rows(messages: list[dict], agent_types: dict) -> list[tuple[Text, int]]:
+    """Convert filtered messages into a flat list of (text, msg_index) rows.
+
+    Rows are Rich Text objects styled by construction — message content is
+    never parsed as markup, so bracket- or backslash-heavy content renders
+    literally.
+    """
+    rows: list[tuple[Text, int]] = []
     prev_agent = None
 
     for msg_idx, msg in enumerate(messages):
@@ -103,11 +103,9 @@ def _build_rows(messages: list[dict], agent_types: dict) -> list[tuple[str, int]
         label = type_info.get("label", agent_type)
 
         if agent_id != prev_agent:
-            dim_open = "[dim]" if role == "user" else ""
-            dim_close = "[/dim]" if role == "user" else ""
-            header = (
-                f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
-            )
+            header = Text.assemble((label, f"bold {color}"), " ", (timestamp, "dim"))
+            if role == "user":
+                header.stylize("dim")
             rows.append((header, msg_idx))
             prev_agent = agent_id
 
@@ -118,14 +116,15 @@ def _build_rows(messages: list[dict], agent_types: dict) -> list[tuple[str, int]
                 first_line = first_line[:117] + "…"
             elif "\n" in content:
                 first_line = first_line + "…"
-            escaped = _escape_markup(first_line)
+            line = Text(first_line)
             if role == "user":
-                rows.append((f"[dim]{escaped}[/dim]", msg_idx))
-            else:
-                rows.append((escaped, msg_idx))
+                line.stylize("dim")
+            rows.append((line, msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{_escape_markup(summary)}[/]", msg_idx))
+            summary_text = Text(summary)
+            summary_text.stylize("dim")
+            rows.append((summary_text, msg_idx))
 
     return rows
 
@@ -288,8 +287,8 @@ class ChatView(Widget):
         if option_list is None:
             return
         options = [
-            Option(_single_line(markup), id=str(i))
-            for i, (markup, _idx) in enumerate(rows)
+            Option(_single_line(text), id=str(i))
+            for i, (text, _idx) in enumerate(rows)
         ]
         option_list.clear_options()
         option_list.add_options(options)
@@ -302,8 +301,10 @@ class ChatView(Widget):
         option_list = self._option_list
         if option_list is None:
             return
+        hint = Text(text)
+        hint.stylize("dim")
         option_list.clear_options()
-        option_list.add_option(Option(_single_line(f"[dim]{text}[/]"), disabled=True))
+        option_list.add_option(Option(_single_line(hint), disabled=True))
 
     def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted

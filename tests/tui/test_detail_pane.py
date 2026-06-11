@@ -65,6 +65,29 @@ async def test_detail_pane_handles_bracket_heavy_content():
         assert "accel-config" in content
 
 
+async def test_detail_pane_renders_backslash_bracket_content():
+    """Content with backslash-bracket sequences renders literally.
+
+    Regression: escaping brackets without accounting for preceding backslashes
+    produced live markup tags and corrupted the rendered text.
+    """
+    command = 'grep -r "#\\[ignore\\]" tests/ --include "*.rs"'
+    app = DetailPaneApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        pane = app.query_one(DetailPane)
+        msg = {
+            "agentType": "general-purpose",
+            "timestamp": "2026-03-20T10:00:00.000Z",
+            "content": command,
+            "_tool_summaries": [f"⚙ Bash: {command}"],
+        }
+        pane.update_message(msg)
+        await pilot.pause()
+        content = str(pane._content.content)
+        assert command in content
+        assert f"⚙ Bash: {command}" in content
+
+
 async def test_detail_pane_clears_on_none():
     """Updating with None clears the pane."""
     app = DetailPaneApp()

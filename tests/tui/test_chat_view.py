@@ -22,6 +22,11 @@ def _option_list(chat: ChatView) -> OptionList:
     return chat.query_one("#chat-options", OptionList)
 
 
+def _is_header_row(text) -> bool:
+    """Header rows are the only rows styled with a bold agent color."""
+    return any("bold" in str(span.style) for span in text.spans)
+
+
 def _make_messages(count: int) -> list[dict]:
     """Generate `count` assistant messages under a single agent id."""
     return [
@@ -122,6 +127,38 @@ async def test_chat_view_user_messages_rendered(sample_messages, sample_agent_ty
             for p in prompts
         )
         assert has_dim
+
+
+async def test_chat_view_renders_backslash_bracket_content(sample_agent_types):
+    """Content with backslash-bracket sequences renders literally.
+
+    Regression: grep patterns like "#\\[ignore\\]" contain a backslash
+    immediately before a bracket. Escaping the bracket on top of the existing
+    backslash produced a live markup tag, corrupting the row text and crashing
+    the option list render with MissingStyle.
+    """
+    command = 'grep -r "#\\[ignore\\]" tests/ --include "*.rs"'
+    messages = [
+        {"uuid": "msg-0", "parentUuid": None, "agentId": "agent-aaa",
+         "role": "assistant", "content": command,
+         "toolUse": [{"tool": "Bash", "input": {}, "summary": f"Bash: {command}"}],
+         "timestamp": "2026-03-20T10:00:00.000Z", "promptId": "mtg-001",
+         "agentType": "web-search-researcher", "teamName": "Test"},
+        {"uuid": "msg-1", "parentUuid": None, "agentId": "agent-aaa",
+         "role": "assistant", "content": 'packages: ["%{VERSION}", "accel-config"]',
+         "toolUse": [], "timestamp": "2026-03-20T10:01:00.000Z",
+         "promptId": "mtg-001", "agentType": "web-search-researcher",
+         "teamName": "Test"},
+    ]
+    app = ChatViewApp()
+    async with app.run_test(size=(160, 24)) as pilot:
+        chat = app.query_one(ChatView)
+        chat.load_messages({"messages": messages, "agents": []}, sample_agent_types)
+        await pilot.pause()
+        plains = [str(opt.prompt) for opt in _option_list(chat).options]
+        assert any(command in plain for plain in plains)
+        assert any(f"⚙ Bash: {command}" in plain for plain in plains)
+        assert any('packages: ["%{VERSION}", "accel-config"]' in plain for plain in plains)
 
 
 async def test_chat_view_empty_state_on_launch():
@@ -239,7 +276,7 @@ def test_build_rows_no_header_same_agent():
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
     assert len(rows) == 3
-    headers = [r for r in rows if "[bold" in r[0]]
+    headers = [r for r in rows if _is_header_row(r[0])]
     assert len(headers) == 1
 
 
@@ -263,7 +300,7 @@ def test_build_rows_tool_rows():
 
 
 def test_build_rows_user_message_dim_styling():
-    """User messages get [dim] markup styling."""
+    """User message content rows carry dim styling across the whole line."""
     msgs = [
         {"agentId": "a1", "agentType": "general-purpose", "role": "user",
          "content": "Question", "toolUse": [], "timestamp": "2026-03-20T10:00:00.000Z",
@@ -271,10 +308,13 @@ def test_build_rows_user_message_dim_styling():
     ]
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
-    content_rows = [r for r in rows if "[bold" not in r[0]]
+    content_rows = [r for r in rows if not _is_header_row(r[0])]
     assert len(content_rows) == 1
-    assert content_rows[0][0].startswith("[dim]")
-    assert content_rows[0][0].endswith("[/dim]")
+    text = content_rows[0][0]
+    assert any(
+        "dim" in str(span.style) and span.start == 0 and span.end == len(text.plain)
+        for span in text.spans
+    )
 
 
 def test_build_rows_truncates_long_content():
@@ -287,10 +327,11 @@ def test_build_rows_truncates_long_content():
     ]
     agent_types = {"general-purpose": {"color": "#FFFAC8", "label": "General"}}
     rows = _build_rows(msgs, agent_types)
-    content_rows = [r for r in rows if "[bold" not in r[0]]
+    content_rows = [r for r in rows if not _is_header_row(r[0])]
     assert len(content_rows) == 1
-    assert "\n" not in content_rows[0][0]
-    assert "…" in content_rows[0][0]
+    line = content_rows[0][0].plain
+    assert "\n" not in line
+    assert "…" in line
 
 
 def test_build_rows_empty_list():
