@@ -1,6 +1,7 @@
 # ABOUTME: Header bar widget showing agent roster and breadcrumb navigation.
 # ABOUTME: Displays colored agent dots with message counts and current location path.
 
+from rich.text import Text
 from textual.widgets import Static
 
 
@@ -26,7 +27,7 @@ class AgentBar(Static):
         self._filter_position: int | None = None
         self._filter_total: int | None = None
         self._search_query: str = ""
-        self._markup: str = ""
+        self._bar_text: Text = Text()
 
     def update_meeting(
         self,
@@ -69,9 +70,14 @@ class AgentBar(Static):
         self._refresh_content()
 
     def _refresh_content(self) -> None:
-        """Rebuild the displayed markup."""
+        """Rebuild the displayed bar text.
+
+        The bar is assembled as a Rich Text with explicit styles — agent
+        labels, search queries, and breadcrumbs are never parsed as markup,
+        so bracket- or backslash-heavy names render literally.
+        """
         if not self.agents and not self.breadcrumb_parts and not self._filter_type and not self._search_query:
-            self._markup = ""
+            self._bar_text = Text()
             self.update("")
             return
 
@@ -82,35 +88,39 @@ class AgentBar(Static):
             type_info = self.agent_types.get(agent_type, {})
             color = type_info.get("color", "#888888")
             label = type_info.get("label", agent_type)
-            parts.append(f"[{color}]●[/] {label}: {count}")
+            parts.append(Text.assemble(("●", color), f" {label}: {count}"))
 
-        roster = "  ".join(parts)
+        roster = Text("  ").join(parts)
         breadcrumb = " › ".join(self.breadcrumb_parts)
 
         # Build filter indicator
-        filter_text = ""
+        filter_text = None
         if self._filter_type:
             type_info = self.agent_types.get(self._filter_type, {})
             filter_label = type_info.get("label", self._filter_type)
             pos_info = ""
             if self._filter_position is not None and self._filter_total is not None:
                 pos_info = f" [{self._filter_position}/{self._filter_total}]"
-            filter_text = f"[bold yellow]Filter: {filter_label}{pos_info}[/]"
+            filter_text = Text(f"Filter: {filter_label}{pos_info}")
+            filter_text.stylize("bold yellow")
 
         # Build search indicator
-        search_text = ""
+        search_text = None
         if self._search_query:
-            search_text = f"[bold cyan]Search: {self._search_query}[/]"
+            search_text = Text(f"Search: {self._search_query}")
+            search_text.stylize("bold cyan")
 
         sections = []
-        if roster:
+        if parts:
             sections.append(roster)
-        if filter_text:
+        if filter_text is not None:
             sections.append(filter_text)
-        if search_text:
+        if search_text is not None:
             sections.append(search_text)
         if breadcrumb:
-            sections.append(f"[dim]{breadcrumb}[/]")
+            breadcrumb_text = Text(breadcrumb)
+            breadcrumb_text.stylize("dim")
+            sections.append(breadcrumb_text)
 
-        self._markup = "  [dim]│[/]  ".join(sections)
-        self.update(self._markup)
+        self._bar_text = Text.assemble("  ", ("│", "dim"), "  ").join(sections)
+        self.update(self._bar_text)

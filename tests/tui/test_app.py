@@ -176,7 +176,7 @@ async def test_agent_filter_keybinding(data_dir):
         await pilot.pause()
         assert len(app._agent_filter) == 1
         assert bar._filter_type is not None
-        assert "Filter:" in str(bar._markup)
+        assert "Filter:" in str(bar._bar_text)
 
         first_filter = bar._filter_type
 
@@ -211,7 +211,7 @@ async def test_escape_clears_agent_filter(data_dir):
         await pilot.pause()
         assert app._agent_filter == set()
         assert bar._filter_type is None
-        assert "Filter:" not in str(bar._markup)
+        assert "Filter:" not in str(bar._bar_text)
 
 
 async def test_search_enter_preserves_results(data_dir):
@@ -305,8 +305,8 @@ async def test_search_indicator_in_agent_bar(data_dir):
         await pilot.press("enter")
         await pilot.pause()
         assert not search.has_class("-visible")
-        assert "Search:" in str(bar._markup)
-        assert "Textual" in str(bar._markup)
+        assert "Search:" in str(bar._bar_text)
+        assert "Textual" in str(bar._bar_text)
 
 
 async def test_search_indicator_clears_on_escape(data_dir):
@@ -332,12 +332,12 @@ async def test_search_indicator_clears_on_escape(data_dir):
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
-        assert "Search:" in str(bar._markup)
+        assert "Search:" in str(bar._bar_text)
 
         # Escape should clear the search
         await pilot.press("escape")
         await pilot.pause()
-        assert "Search:" not in str(bar._markup)
+        assert "Search:" not in str(bar._bar_text)
 
 
 async def test_filter_cycle_shows_position(data_dir):
@@ -356,14 +356,14 @@ async def test_filter_cycle_shows_position(data_dir):
         # Press 'f' to activate first filter
         await pilot.press("f")
         await pilot.pause()
-        markup = str(bar._markup)
-        assert "[1/" in markup
+        bar_text = str(bar._bar_text)
+        assert "[1/" in bar_text
 
         # Press 'f' again to cycle
         await pilot.press("f")
         await pilot.pause()
-        markup = str(bar._markup)
-        assert "[2/" in markup
+        bar_text = str(bar._bar_text)
+        assert "[2/" in bar_text
 
 
 async def test_tab_cycles_with_detail_pane(data_dir):

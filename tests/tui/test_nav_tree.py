@@ -174,6 +174,64 @@ async def test_project_label_includes_session_count(sample_index):
         assert "(1)" in str(project_node.label)
 
 
+async def test_project_label_renders_brackets_literally():
+    """Project display names containing brackets render literally.
+
+    Worktree directory names produce display names like
+    "agent-board [worktree]" — Tree must not parse them as markup.
+    """
+    index_data = {
+        "projects": [
+            {
+                "slug": "-test-brackets",
+                "displayName": "agent-board [worktree]",
+                "sessions": [
+                    {
+                        "id": "sess-wt",
+                        "startTime": "2026-03-20T10:00:00.000Z",
+                        "endTime": "2026-03-20T11:00:00.000Z",
+                        "agentCount": 0,
+                    },
+                ],
+            }
+        ]
+    }
+    app = NavTreeApp(index_data)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        label = str(tree.root.children[0].label)
+        assert label == "agent-board [worktree] (1)"
+
+
+async def test_session_label_renders_brackets_literally():
+    """Session labels with bracket sequences render literally.
+
+    Start times come from transcript JSON — a malformed value containing
+    brackets must not be parsed as markup.
+    """
+    index_data = {
+        "projects": [
+            {
+                "slug": "-test-session-brackets",
+                "displayName": "test/brackets",
+                "sessions": [
+                    {
+                        "id": "sess-bad-time",
+                        "startTime": "[worktree]T10:00",
+                        "endTime": None,
+                        "agentCount": 0,
+                    },
+                ],
+            }
+        ]
+    }
+    app = NavTreeApp(index_data)
+    async with app.run_test() as pilot:
+        tree = app.query_one(NavTree)
+        label = str(tree.root.children[0].children[0].label)
+        assert label == "[worktree] 10:00"
+
+
 async def test_session_label_multi_agent():
     """Sessions with 2+ agents should show '{start} · {n} agents'."""
     index_data = {

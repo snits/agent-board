@@ -65,8 +65,8 @@ async def test_agent_bar_set_filter(sample_agent_types):
         bar.set_filter("web-search-researcher")
         await pilot.pause()
         assert bar._filter_type == "web-search-researcher"
-        # The update() call passes markup containing the filter label
-        assert "Filter: Web Search Researcher" in str(bar._markup)
+        # The rendered bar text contains the filter label
+        assert "Filter: Web Search Researcher" in str(bar._bar_text)
 
 
 async def test_agent_bar_filter_shows_position(sample_agent_types):
@@ -80,8 +80,8 @@ async def test_agent_bar_filter_shows_position(sample_agent_types):
         bar.update_meeting(agents, sample_agent_types, ["proj", "sess", "team"])
         bar.set_filter("general-purpose", position=2, total=3)
         await pilot.pause()
-        assert "[2/3]" in str(bar._markup)
-        assert "Filter: General Purpose" in str(bar._markup)
+        assert "[2/3]" in str(bar._bar_text)
+        assert "Filter: General Purpose" in str(bar._bar_text)
 
 
 async def test_agent_bar_clear_filter(sample_agent_types):
@@ -98,7 +98,7 @@ async def test_agent_bar_clear_filter(sample_agent_types):
         bar.set_filter(None)
         await pilot.pause()
         assert bar._filter_type is None
-        assert "Filter:" not in str(bar._markup)
+        assert "Filter:" not in str(bar._bar_text)
 
 
 async def test_agent_bar_shows_search_query(sample_agent_types):
@@ -112,8 +112,27 @@ async def test_agent_bar_shows_search_query(sample_agent_types):
         bar.update_meeting(agents, sample_agent_types, ["proj", "sess"])
         bar.set_search("textual")
         await pilot.pause()
-        assert "Search:" in str(bar._markup)
-        assert "textual" in str(bar._markup)
+        assert "Search:" in str(bar._bar_text)
+        assert "textual" in str(bar._bar_text)
+
+
+async def test_agent_bar_renders_bracket_content_literally(sample_agent_types):
+    """Breadcrumb names and search queries with brackets render literally.
+
+    Worktree project names like "agent-board [worktree]" and search queries
+    like 'grep "#\\[ignore\\]"' must not be parsed as markup — tags would be
+    silently eaten or crash the render with MarkupError.
+    """
+    app = AgentBarApp()
+    async with app.run_test() as pilot:
+        bar = app.query_one(AgentBar)
+        bar.update_meeting([], sample_agent_types, ["agent-board [worktree]", "sess-001"])
+        bar.set_search('grep "#\\[ignore\\]" [/x')
+        await pilot.pause()
+        rendered = bar.render()
+        plain = getattr(rendered, "plain", str(rendered))
+        assert "agent-board [worktree] › sess-001" in plain
+        assert 'Search: grep "#\\[ignore\\]" [/x' in plain
 
 
 async def test_agent_bar_clear_search(sample_agent_types):
@@ -129,4 +148,4 @@ async def test_agent_bar_clear_search(sample_agent_types):
         await pilot.pause()
         bar.set_search("")
         await pilot.pause()
-        assert "Search:" not in str(bar._markup)
+        assert "Search:" not in str(bar._bar_text)

@@ -3,6 +3,7 @@
 
 from dataclasses import dataclass
 
+from rich.text import Text
 from textual.message import Message
 from textual.widgets import Tree
 
@@ -64,7 +65,9 @@ class NavTree(Tree):
                 slug=project["slug"],
                 display_name=project["displayName"],
             )
-            project_label = f"{project['displayName']} ({len(sessions)})"
+            # Labels are wrapped in Text so bracket-heavy values from the
+            # index (display names, timestamps) are not parsed as markup
+            project_label = Text(f"{project['displayName']} ({len(sessions)})")
             project_node = self.root.add(project_label, data=project_data)
 
             sorted_sessions = sorted(
@@ -84,7 +87,7 @@ class NavTree(Tree):
                     agent_count=session["agentCount"],
                     start_time=session.get("startTime", ""),
                 )
-                project_node.add_leaf(label, data=session_data)
+                project_node.add_leaf(Text(label), data=session_data)
 
     def reload(self, index_data: dict) -> None:
         """Clear and rebuild the tree from fresh index data."""
