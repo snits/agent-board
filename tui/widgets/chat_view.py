@@ -1,7 +1,6 @@
 # ABOUTME: Chat view widget for displaying grouped agent message streams.
 # ABOUTME: Wraps Textual's OptionList to render headers, content lines, and tool summaries.
 
-from rich.markup import escape
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.css.query import NoMatches
@@ -22,6 +21,11 @@ def _single_line(markup: str) -> Text:
     text = Text.from_markup(markup, overflow="ellipsis")
     text.no_wrap = True
     return text
+
+
+def _escape_markup(text: str) -> str:
+    """Escape all square brackets so Rich never interprets them as tags."""
+    return text.replace("[", "\\[")
 
 
 def is_empty_message(msg: dict) -> bool:
@@ -83,9 +87,7 @@ def _precompute_messages(messages: list[dict]) -> None:
         msg["_search_text"] = "\n".join(parts).lower()
 
 
-def _build_rows(
-    messages: list[dict], agent_types: dict
-) -> list[tuple[str, int]]:
+def _build_rows(messages: list[dict], agent_types: dict) -> list[tuple[str, int]]:
     """Convert filtered messages into a flat list of (markup, msg_index) rows."""
     rows: list[tuple[str, int]] = []
     prev_agent = None
@@ -103,7 +105,9 @@ def _build_rows(
         if agent_id != prev_agent:
             dim_open = "[dim]" if role == "user" else ""
             dim_close = "[/dim]" if role == "user" else ""
-            header = f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
+            header = (
+                f"{dim_open}[bold {color}]{label}[/] [dim]{timestamp}[/]{dim_close}"
+            )
             rows.append((header, msg_idx))
             prev_agent = agent_id
 
@@ -114,14 +118,14 @@ def _build_rows(
                 first_line = first_line[:117] + "…"
             elif "\n" in content:
                 first_line = first_line + "…"
-            escaped = escape(first_line)
+            escaped = _escape_markup(first_line)
             if role == "user":
                 rows.append((f"[dim]{escaped}[/dim]", msg_idx))
             else:
                 rows.append((escaped, msg_idx))
 
         for summary in msg.get("_tool_summaries", []):
-            rows.append((f"[dim]{escape(summary)}[/]", msg_idx))
+            rows.append((f"[dim]{_escape_markup(summary)}[/]", msg_idx))
 
     return rows
 
@@ -184,6 +188,7 @@ class ChatView(Widget):
 
     class MessageFocused(Message):
         """Posted when cursor moves to a different message."""
+
         def __init__(self, message: dict) -> None:
             super().__init__()
             self.message = message
@@ -248,7 +253,9 @@ class ChatView(Widget):
         self._all_messages = [m for m in raw if not m.get("_is_empty")]
         self._apply_and_render()
 
-    def apply_filters(self, search_query: str = "", agent_filter: set[str] | None = None) -> None:
+    def apply_filters(
+        self, search_query: str = "", agent_filter: set[str] | None = None
+    ) -> None:
         """Apply search and agent filters, then refresh the option list."""
         self._search_query = search_query
         self._agent_filter = agent_filter or set()
@@ -268,7 +275,11 @@ class ChatView(Widget):
 
         if self.message_count == 0:
             self._row_msg_idx = []
-            hint = self.EMPTY_STATE_HINT if not self._all_messages else self.EMPTY_FILTER_HINT
+            hint = (
+                self.EMPTY_STATE_HINT
+                if not self._all_messages
+                else self.EMPTY_FILTER_HINT
+            )
             self._show_empty_hint(hint)
             return
 

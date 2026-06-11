@@ -1,9 +1,13 @@
 # ABOUTME: Detail pane widget for showing full message content.
 # ABOUTME: Scrollable panel that renders the complete text of a focused message.
 
-from rich.markup import escape
 from textual.containers import ScrollableContainer
 from textual.widgets import Static
+
+
+def _escape_markup(text: str) -> str:
+    """Escape all square brackets so Rich never interprets them as tags."""
+    return text.replace("[", "\\[")
 
 
 class DetailPane(ScrollableContainer):
@@ -42,18 +46,18 @@ class DetailPane(ScrollableContainer):
         type_info = self._agent_types.get(agent_type, {})
         color = type_info.get("color", "#888888")
         label = type_info.get("label", agent_type)
-        parts.append(f"[bold {color}]{label}[/] [dim]{timestamp}[/]")
+        parts.append(f"[bold {color}]{_escape_markup(label)}[/] [dim]{timestamp}[/]")
         parts.append("")
 
         # Full content
         content = message.get("content", "")
         if content:
-            parts.append(escape(content))
+            parts.append(_escape_markup(content))
             parts.append("")
 
         # Tool summaries
         for summary in message.get("_tool_summaries", []):
-            parts.append(f"[dim]{escape(summary)}[/]")
+            parts.append(f"[dim]{_escape_markup(summary)}[/]")
 
         self._content.update("\n".join(parts))
         self.scroll_home(animate=False)

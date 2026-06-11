@@ -47,13 +47,35 @@ async def test_detail_pane_renders_message():
         assert "Read" in content
 
 
+async def test_detail_pane_handles_bracket_heavy_content():
+    """Content with square brackets that look like broken markup tags doesn't crash."""
+    app = DetailPaneApp()
+    async with app.run_test(size=(80, 24)) as pilot:
+        pane = app.query_one(DetailPane)
+        msg = {
+            "agentType": "general-purpose",
+            "timestamp": "2026-03-20T10:00:00.000Z",
+            "content": 'packages: ["%{VERSION}", "accel-config"],\nmore [stuff] here',
+            "_tool_summaries": ["⚙ Read → [some/path]"],
+        }
+        pane.update_message(msg)
+        await pilot.pause()
+        content = str(pane._content.content)
+        assert "VERSION" in content
+        assert "accel-config" in content
+
+
 async def test_detail_pane_clears_on_none():
     """Updating with None clears the pane."""
     app = DetailPaneApp()
     async with app.run_test(size=(80, 24)) as pilot:
         pane = app.query_one(DetailPane)
-        msg = {"agentType": "general-purpose", "timestamp": "2026-03-20T10:00:00.000Z",
-               "content": "Hello", "_tool_summaries": []}
+        msg = {
+            "agentType": "general-purpose",
+            "timestamp": "2026-03-20T10:00:00.000Z",
+            "content": "Hello",
+            "_tool_summaries": [],
+        }
         pane.update_message(msg)
         await pilot.pause()
         pane.update_message(None)
